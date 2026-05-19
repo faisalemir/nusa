@@ -1,0 +1,28 @@
+# Nusa PHP Runtime Configuration
+#
+# Copy this file to config.toml and adjust settings as needed.
+# Environment variables prefixed with PHPRT_ override these values.
+
+# PHP execution engine: "ffi" | "wasm" | "child"
+engine = "child"
+
+# Number of concurrent PHP workers (used as pool size and backpressure limit)
+max_workers = 4
+
+# Per-request timeout in milliseconds
+timeout_ms = 30000
+
+# Maximum memory per WASM worker (MB, only used when engine = "wasm")
+wasm_memory_mb = 256
+
+# Virtual filesystem root for PHP scripts
+vfs_root = "/app/public"
+
+# PHP code directory (used by Landlock security rules)
+code_dir = "/app/public"
+
+# Temporary directory for uploads and sessions
+tmp_dir = "/tmp/phprt"
+
+# Enable hot-reload: watch config file for changes
+hot_reload = true

@@ -1,0 +1,169 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Nusa PHP Worker Bootstrap
+ *
+ * This script is executed by each child process in Octane mode.
+ * It boots the Laravel application once, then enters an IPC
+ * loop waiting for requests from the Rust orchestrator.
+ *
+ * Usage:
+ *   php bin/octane-rust-worker <socket-path>
+ *
+ * Protocol (stdin/stdout or Unix Socket):
+ *   - Rust sends framed requests (4-byte LE length + JSON payload)
+ *   - PHP responds with framed responses
+ *   - Control messages: Hello, Ack, Ping, Pong, Shutdown, Recycle
+ */
+
+$socketPath = $argv[1] ?? null;
+if (!$socketPath) {
+    fwrite(STDERR, "Usage: octane-rust-worker <socket-path>\n");
+    exit(1);
+}
+
+require __DIR__ . '/../vendor/autoload.php';
+
+$app = require_once getcwd() . '/bootstrap/app.php';
+$kernel = $app->make(Illuminate\Contracts\Http\Kernel::class);
+
+// Boot Laravel
+$kernel->bootstrap();
+
+fwrite(STDERR, "Nusa PHP Worker started\n");
+
+// Connect to Unix socket
+$socket = @stream_socket_client("unix://{$socketPath}", $errno, $errstr, 5);
+if (!$socket) {
+    fwrite(STDERR, "Failed to connect to socket: {$errstr}\n");
+    exit(1);
+}
+
+// Send Hello handshake
+$hello = json_encode([
+    'type' => 'Hello',
+    'version' => '1.0',
+    'pid' => getmypid(),
+    'capabilities' => ['http', 'tasks'],
+]);
+$len = pack('V', strlen($hello));
+fwrite($socket, $len . $hello);
+
+// Main IPC loop
+while (true) {
+    // Read frame length (4 bytes LE)
+    $lenBin = @fread($socket, 4);
+    if ($lenBin === false || strlen($lenBin) < 4) {
+        break; // Connection closed
+    }
+    $len = unpack('V', $lenBin)[1];
+    
+    // Read payload
+    $payload = '';
+    while (strlen($payload) < $len) {
+        $chunk = fread($socket, $len - strlen($payload));
+        if ($chunk === false || $chunk === '') {
+            break;
+        }
+        $payload .= $chunk;
+    }
+    
+    if (strlen($payload) < $len) {
+        break;
+    }
+    
+    $msg = json_decode($payload, true);
+    if (!$msg) {
+        continue;
+    }
+    
+    switch ($msg['type']) {
+        case 'Shutdown':
+        case 'Recycle':
+            exit(0);
+            
+        case 'Ping':
+            $pong = json_encode(['type' => 'Pong']);
+            $len = pack('V', strlen($pong));
+            fwrite($socket, $len . $pong);
+            break;
+            
+        case 'Request':
+            handleRequest($msg, $kernel, $socket);
+            break;
+    }
+}
+
+/**
+ * Handle an incoming HTTP request.
+ */
+function handleRequest(array $data, $kernel, $socket): void
+{
+    try {
+        $request = toLaravelRequest($data);
+        $response = $kernel->handle($request);
+        sendResponse($data['id'], $response, $socket);
+        $kernel->terminate($request, $response);
+    } catch (\Throwable $e) {
+        error_log($e->getMessage());
+        sendErrorResponse($data['id'], 500, $e->getMessage(), $socket);
+    }
+}
+
+/**
+ * Convert IPC request data to Laravel Request.
+ */
+function toLaravelRequest(array $data): \Illuminate\Http\Request
+{
+    $_SERVER = array_merge($_SERVER, $data['server'] ?? []);
+    $_GET = $data['query'] ?? [];
+    $_POST = $data['post'] ?? [];
+    $_COOKIE = $data['cookies'] ?? [];
+
+    return \Illuminate\Http\Request::create(
+        $data['uri'],
+        $data['method'],
+        $_GET,
+        $_COOKIE,
+        [],
+        $_SERVER,
+        $data['body'] ?? ''
+    );
+}
+
+/**
+ * Send HTTP response via IPC.
+ */
+function sendResponse(string $id, \Symfony\Component\HttpFoundation\Response $response, $socket): void
+{
+    $payload = json_encode([
+        'type' => 'Response',
+        'id' => $id,
+        'status' => $response->getStatusCode(),
+        'headers' => $response->headers->all(),
+        'body' => $response->getContent(),
+        'terminated' => true,
+    ]);
+    $len = pack('V', strlen($payload));
+    fwrite($socket, $len . $payload);
+}
+
+/**
+ * Send error response via IPC.
+ */
+function sendErrorResponse(string $id, int $status, string $message, $socket): void
+{
+    $payload = json_encode([
+        'type' => 'Response',
+        'id' => $id,
+        'status' => $status,
+        'headers' => ['Content-Type' => ['text/plain']],
+        'body' => $message,
+        'terminated' => true,
+    ]);
+    $len = pack('V', strlen($payload));
+    fwrite($socket, $len . $payload);
+}

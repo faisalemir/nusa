@@ -1,0 +1,22 @@
+[package]
+name = "phprt-engine-ffi"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "PHP ZTS FFI engine wrapper (isolated unsafe)"
+
+[dependencies]
+phprt-core = { path = "../phprt-core" }
+tokio.workspace = true
+http.workspace = true
+bytes.workspace = true
+libc.workspace = true
+tracing.workspace = true
+async-trait.workspace = true
+parking_lot.workspace = true
+thiserror.workspace = true
+
+[build-dependencies]
+bindgen.workspace = true

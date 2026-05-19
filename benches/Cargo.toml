@@ -1,0 +1,24 @@
+[package]
+name = "phprt-benchmarks"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[[bench]]
+name = "gateway_bench"
+path = "src/gateway_bench.rs"
+harness = false
+
+[[bench]]
+name = "ipc_bench"
+path = "src/ipc_bench.rs"
+harness = false
+
+[dependencies]
+phprt-core = { path = "../crates/phprt-core" }
+phprt-gateway = { path = "../crates/phprt-gateway" }
+phprt-ipc = { path = "../crates/phprt-ipc" }
+criterion = "0.5"
+tokio.workspace = true
+bytes.workspace = true

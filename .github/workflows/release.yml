@@ -1,0 +1,49 @@
+name: Release & Attestation
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-sign:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+
+      - name: Build Release
+        run: cargo build --release --target x86_64-unknown-linux-musl --bin phprt
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: phprt:${{ github.ref_name }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+
+      - name: Sign Binary
+        uses: sigstore/cosign-installer@v3
+      - run: |
+          cosign sign-blob \
+            --key env://COSIGN_PRIVATE_KEY \
+            --yes \
+            target/x86_64-unknown-linux-musl/release/phprt > phprt.sig
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            target/x86_64-unknown-linux-musl/release/phprt
+            phprt.sig
+            sbom.spdx.json
+          generate_release_notes: true

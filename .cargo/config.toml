@@ -1,0 +1,13 @@
+[target.x86_64-unknown-linux-musl]
+rustflags = ["-C", "target-feature=+crt-static"]
+linker = "rust-lld"
+
+[target.aarch64-unknown-linux-musl]
+rustflags = ["-C", "target-feature=+crt-static"]
+linker = "rust-lld"
+
+[target.'cfg(unix)']
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+
+[build]
+incremental = true

@@ -1,0 +1,29 @@
+[package]
+name = "phprt-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "CLI binary entry point for the Nusa PHP runtime"
+
+[[bin]]
+name = "phprt"
+path = "src/main.rs"
+
+[dependencies]
+phprt-core = { path = "../phprt-core" }
+phprt-gateway = { path = "../phprt-gateway" }
+phprt-engine-ffi = { path = "../phprt-engine-ffi" }
+phprt-engine-wasm = { path = "../phprt-engine-wasm" }
+phprt-engine-child = { path = "../phprt-engine-child" }
+phprt-plugin-api = { path = "../phprt-plugin-api" }
+phprt-security = { path = "../phprt-security" }
+phprt-config = { path = "../phprt-config" }
+phprt-telemetry = { path = "../phprt-telemetry" }
+phprt-octane-worker = { path = "../phprt-octane-worker" }
+tokio.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+tracing.workspace = true
+axum.workspace = true

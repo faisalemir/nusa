@@ -1,0 +1,81 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/phprt-core",
+    "crates/phprt-gateway",
+    "crates/phprt-engine-ffi",
+    "crates/phprt-engine-wasm",
+    "crates/phprt-engine-child",
+    "crates/phprt-plugin-api",
+    "crates/phprt-security",
+    "crates/phprt-config",
+    "crates/phprt-telemetry",
+    "crates/phprt-cli",
+    "crates/phprt-octane-worker",
+    "benches",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+license = "MIT"
+repository = "https://github.com/nusa-rs/nusa"
+
+[workspace.dependencies]
+# Async Runtime
+tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["codec"] }
+futures = "0.3"
+
+# HTTP
+axum = { version = "0.8", features = ["http2"] }
+tower = { version = "0.5", features = ["full"] }
+tower-http = { version = "0.6", features = ["timeout", "trace", "cors", "compression-full"] }
+hyper = { version = "1", features = ["full"] }
+http = "1"
+
+# Observability
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
+tracing-opentelemetry = "0.33"
+opentelemetry = { version = "0.32", features = ["trace"] }
+opentelemetry-otlp = "0.32"
+opentelemetry_sdk = { version = "0.32", features = ["rt-tokio"] }
+metrics = "0.24"
+metrics-exporter-prometheus = "0.18"
+
+# Error Handling & Serialization
+thiserror = "2"
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+figment = { version = "0.10", features = ["toml", "env"] }
+
+# Concurrency & State
+arc-swap = "1"
+parking_lot = "0.12"
+uuid = { version = "1", features = ["v4", "serde"] }
+bytes = "1"
+
+# Security & Sandbox
+wasmtime = "44"
+wasmtime-wasi = "44"
+
+# Utilities
+notify = "8"
+clap = { version = "4", features = ["derive"] }
+bindgen = "0.72"
+libc = "0.2"
+ctrlc = "3"
+rmp-serde = "1.3"
+async-trait = "0.1"
+
+# Profile settings
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+
+[profile.dev]
+split-debuginfo = "packed"

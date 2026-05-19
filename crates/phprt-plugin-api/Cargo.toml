@@ -1,0 +1,18 @@
+[package]
+name = "phprt-plugin-api"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Plugin registry and ABI definitions"
+
+[dependencies]
+phprt-core = { path = "../phprt-core" }
+tracing.workspace = true
+anyhow.workspace = true
+parking_lot.workspace = true
+async-trait.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util", "time", "macros"] }
