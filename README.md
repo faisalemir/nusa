@@ -22,18 +22,18 @@ Client → TLS/HTTP2 → Rust Gateway (Axum)
 
 | Crate | Purpose | Milestone |
 |-------|---------|-----------|
-| `phprt-core` | Core types, traits, errors, resource guards | M0, M1 |
-| `phprt-gateway` | Axum HTTP server, middleware, health probes, TLS | M1, M3 |
-| `phprt-engine-ffi` | PHP ZTS FFI wrapper (isolated unsafe) | M1 |
-| `phprt-engine-wasm` | PHP WASM sandbox (wasmtime) | M3 |
-| `phprt-engine-child` | PHP child process engine | M1, M2 |
-| `phprt-ipc` | IPC Contract v1: framed binary codec | M2 |
-| `phprt-octane-worker` | Worker pool manager with recycle logic | M2 |
-| `phprt-config` | TOML/Env config with ArcSwap hot-reload | M0 |
-| `phprt-security` | Landlock + Seccomp hardening | M3 |
-| `phprt-telemetry` | OpenTelemetry + Prometheus | M1, M3 |
-| `phprt-plugin-api` | Plugin registry with pre/post exec hooks | M0, M2 |
-| `phprt-cli` | Binary entry point (phprt) | M0, M1 |
+| `nusa-core` | Core types, traits, errors, resource guards | M0, M1 |
+| `nusa-gateway` | Axum HTTP server, middleware, health probes, TLS | M1, M3 |
+| `nusa-engine-ffi` | PHP ZTS FFI wrapper (isolated unsafe) | M1 |
+| `nusa-engine-wasm` | PHP WASM sandbox (wasmtime) | M3 |
+| `nusa-engine-child` | PHP child process engine | M1, M2 |
+| `nusa-ipc` | IPC Contract v1: framed binary codec | M2 |
+| `nusa-octane-worker` | Worker pool manager with recycle logic | M2 |
+| `nusa-config` | TOML/Env config with ArcSwap hot-reload | M0 |
+| `nusa-security` | Landlock + Seccomp hardening | M3 |
+| `nusa-telemetry` | OpenTelemetry + Prometheus | M1, M3 |
+| `nusa-plugin-api` | Plugin registry with pre/post exec hooks | M0, M2 |
+| `nusa-cli` | Binary entry point (nusa) | M0, M1 |
 
 ## Phase 1 Status: ✅ Complete
 
@@ -78,14 +78,14 @@ cp config.toml.example config.toml
 cargo build --release
 
 # Run
-./target/release/phprt --config config.toml
+./target/release/nusa --config config.toml
 ```
 
 ### Docker
 
 ```bash
-docker build -t phprt .
-docker run -p 8080:8080 -v /path/to/laravel:/app/public phprt
+docker build -t nusa .
+docker run -p 8080:8080 -v /path/to/laravel:/app/public nusa
 ```
 
 ### Verify
@@ -105,7 +105,7 @@ max_workers = 4
 timeout_ms = 30000
 vfs_root = "/app/public"
 code_dir = "/app/public"
-tmp_dir = "/tmp/phprt"
+tmp_dir = "/tmp/nusa"
 hot_reload = true
 ```
 
@@ -129,7 +129,7 @@ export PHPRT_TIMEOUT_MS=60000
 
 ## Security
 
-- `#![deny(unsafe_code)]` enforced in all crates except `phprt-engine-ffi`
+- `#![deny(unsafe_code)]` enforced in all crates except `nusa-engine-ffi`
 - All unsafe blocks in FFI crate have `// SAFETY:` comments
 - Zero CVEs found in 452+ dependencies
 - SBOM generation and SLSA provenance in CI pipeline

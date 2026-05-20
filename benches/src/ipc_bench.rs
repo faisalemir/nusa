@@ -1,11 +1,11 @@
 //! IPC benchmarks: Serialization, framing, codec
 //!
-//! Run: cargo bench -p phprt-benchmarks --bench ipc_bench
+//! Run: cargo bench -p nusa-benchmarks --bench ipc_bench
 
 use criterion::{criterion_group, criterion_main, Criterion, black_box};
 use std::time::Duration;
 
-use phprt_ipc::{IpcMessage, RequestId};
+use nusa_ipc::{IpcMessage, RequestId};
 
 fn bench_ipc_serialization(c: &mut Criterion) {
     let mut group = c.benchmark_group("ipc_serialization");

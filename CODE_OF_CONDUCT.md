@@ -18,4 +18,4 @@ Examples of unacceptable behavior:
 Project maintainers are responsible for clarifying standards and will take appropriate action against violations.
 
 ## Reporting
-Instances of abusive or unacceptable behavior may be reported to conduct@phprt.dev.
+Instances of abusive or unacceptable behavior may be reported to conduct@nusa.dev.

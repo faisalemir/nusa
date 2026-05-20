@@ -28,7 +28,7 @@
    ```
 3. **Kill runaway workers (emergency):**
    ```bash
-   systemctl restart phprt
+   systemctl restart nusa
    ```
 
 ### Root Cause Analysis
@@ -69,21 +69,21 @@
    ```
 2. **Restart runtime pods/nodes** (rolling restart):
    ```bash
-   kubectl rollout restart deployment/phprt
+   kubectl rollout restart deployment/nusa
    ```
 
 ### Root Cause Analysis
 1. **Verify Unix Socket permissions:**
    ```bash
    ls -la /app/.octane/worker-*.sock
-   # Should be owned by phprt:phprt with 0660
+   # Should be owned by nusa:nusa with 0660
    ```
 2. **Check IPC contract version compatibility:**
    - Rust side: `nusa-ipc` version
    - PHP side: `php-driver` version
 3. **Review logs for framing errors:**
    ```bash
-   journalctl -u phprt | grep "framing\|IPC"
+   journalctl -u nusa | grep "framing\|IPC"
    ```
 
 ### Resolution
@@ -148,7 +148,7 @@
    - If not, check for persistent upstream failures
 2. **Scale horizontally (if K8s):**
    ```bash
-   kubectl scale deployment phprt --replicas=10
+   kubectl scale deployment nusa --replicas=10
    ```
 
 ### Root Cause Analysis
@@ -181,9 +181,9 @@
 ### Containment
 1. **Rotate certificate immediately:**
    ```bash
-   cp /certs/new-cert.pem /etc/phprt/tls/cert.pem
-   cp /certs/new-key.pem /etc/phprt/tls/key.pem
-   systemctl reload phprt
+   cp /certs/new-cert.pem /etc/nusa/tls/cert.pem
+   cp /certs/new-key.pem /etc/nusa/tls/key.pem
+   systemctl reload nusa
    ```
 
 ### Prevention
@@ -207,16 +207,16 @@
 ### Containment
 1. **Validate config file syntax:**
    ```bash
-   phprt config validate --config /etc/phprt/nusa.toml
+   nusa config validate --config /etc/nusa/nusa.toml
    ```
 2. **Restart runtime if config is stuck:**
    ```bash
-   systemctl restart phprt
+   systemctl restart nusa
    ```
 
 ### Root Cause Analysis
 1. **Check config file for TOML syntax errors**
-2. **Verify file permissions** (phprt user must have read access)
+2. **Verify file permissions** (nusa user must have read access)
 3. **Check notify watcher** for dropped events
 
 ### Resolution

@@ -59,11 +59,11 @@ ci: fmt-check lint test security
 
 # Build Docker image
 docker-build:
-    docker build -t phprt .
+    docker build -t nusa .
 
 # Run container
 docker-run:
-    docker run -p 8080:8080 phprt
+    docker run -p 8080:8080 nusa
 
 # --- Docs ---
 

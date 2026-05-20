@@ -1,0 +1,30 @@
+[package]
+name = "nusa-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "CLI binary entry point for the Nusa PHP runtime"
+
+[[bin]]
+name = "nusa"
+path = "src/main.rs"
+
+[dependencies]
+nusa-core = { path = "../nusa-core" }
+nusa-gateway = { path = "../nusa-gateway" }
+nusa-engine-ffi = { path = "../nusa-engine-ffi" }
+nusa-engine-wasm = { path = "../nusa-engine-wasm" }
+nusa-engine-child = { path = "../nusa-engine-child" }
+nusa-plugin-api = { path = "../nusa-plugin-api" }
+nusa-security = { path = "../nusa-security" }
+nusa-config = { path = "../nusa-config" }
+nusa-telemetry = { path = "../nusa-telemetry" }
+nusa-octane-worker = { path = "../nusa-octane-worker" }
+tokio.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+tracing.workspace = true
+axum.workspace = true
+notify.workspace = true

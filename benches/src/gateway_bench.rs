@@ -1,13 +1,13 @@
 //! Gateway benchmarks: Circuit breaker, health state, resource guards
 //!
-//! Run: `cargo bench -p phprt-benchmarks --bench gateway_bench`
+//! Run: `cargo bench -p nusa-benchmarks --bench gateway_bench`
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use std::time::Duration;
 
-use phprt_core::{validate_request_size, BackpressureGuard, ResourceGuard};
-use phprt_gateway::circuit_breaker::CircuitBreaker;
-use phprt_gateway::health::HealthState;
+use nusa_core::{validate_request_size, BackpressureGuard, ResourceGuard};
+use nusa_gateway::circuit_breaker::CircuitBreaker;
+use nusa_gateway::health::HealthState;
 
 fn bench_circuit_breaker(c: &mut Criterion) {
     let mut group = c.benchmark_group("circuit_breaker");

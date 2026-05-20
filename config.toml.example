@@ -22,7 +22,7 @@ vfs_root = "/app/public"
 code_dir = "/app/public"
 
 # Temporary directory for uploads and sessions
-tmp_dir = "/tmp/phprt"
+tmp_dir = "/tmp/nusa"
 
 # Enable hot-reload: watch config file for changes
 hot_reload = true

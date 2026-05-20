@@ -1,0 +1,43 @@
+# Nusa Runtime - Static File Handler
+# Grafana Dashboard: Runtime Overview
+{
+  "dashboard": {
+    "title": "Nusa Runtime Overview",
+    "panels": [
+      {
+        "title": "Requests per Second",
+        "type": "graph",
+        "targets": [{"expr": "rate(nusa_requests_total[1m])"}]
+      },
+      {
+        "title": "P50/P95/P99 Latency (ms)",
+        "type": "graph",
+        "targets": [
+          {"expr": "histogram_quantile(0.50, rate(nusa_request_duration_ms_bucket[5m]))"},
+          {"expr": "histogram_quantile(0.95, rate(nusa_request_duration_ms_bucket[5m]))"},
+          {"expr": "histogram_quantile(0.99, rate(nusa_request_duration_ms_bucket[5m]))"}
+        ]
+      },
+      {
+        "title": "Error Rate",
+        "type": "graph",
+        "targets": [{"expr": "rate(nusa_requests_failed_total[1m]) / rate(nusa_requests_total[1m])"}]
+      },
+      {
+        "title": "Uptime",
+        "type": "stat",
+        "targets": [{"expr": "time() - process_start_time_seconds"}]
+      },
+      {
+        "title": "Active Tenants",
+        "type": "stat",
+        "targets": [{"expr": "nusa_tenants_active"}]
+      },
+      {
+        "title": "Backpressure Usage",
+        "type": "gauge",
+        "targets": [{"expr": "nusa_backpressure_usage"}]
+      }
+    ]
+  }
+}

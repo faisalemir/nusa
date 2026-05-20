@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - cargo-nextest integration for parallel test execution (2.6s for 130 tests)
 
 ### Security
-- `#![deny(unsafe_code)]` enforced in all crates except `phprt-engine-ffi`
+- `#![deny(unsafe_code)]` enforced in all crates except `nusa-engine-ffi`
 - All unsafe blocks in FFI crate documented with `// SAFETY:` comments
 - Zero CVEs found in 452+ dependencies
 

@@ -1,0 +1,42 @@
+# Grafana Dashboard: Laravel App
+{
+  "dashboard": {
+    "title": "Nusa Laravel App",
+    "panels": [
+      {
+        "title": "Requests by Route",
+        "type": "bar",
+        "targets": [{"expr": "rate(nusa_requests_total[5m])", "by": "route"}]
+      },
+      {
+        "title": "Task Offload Rate",
+        "type": "graph",
+        "targets": [
+          {"expr": "rate(nusa_task_offloads_total[1m])", "by": "task_type"}
+        ]
+      },
+      {
+        "title": "Task Success Rate",
+        "type": "graph",
+        "targets": [
+          {"expr": "rate(nusa_tasks_completed_total[5m]) / rate(nusa_task_offloads_total[5m])"}
+        ]
+      },
+      {
+        "title": "Tenant Isolation Violations",
+        "type": "stat",
+        "targets": [{"expr": "nusa_tenant_violations_total"}]
+      },
+      {
+        "title": "Rate Limited Requests (429s)",
+        "type": "graph",
+        "targets": [{"expr": "rate(nusa_rate_limit_rejected_total[1m])", "by": "tenant_id"}]
+      },
+      {
+        "title": "Per-Tenant Request Distribution",
+        "type": "piechart",
+        "targets": [{"expr": "rate(nusa_requests_total[5m])", "by": "tenant_id"}]
+      }
+    ]
+  }
+}

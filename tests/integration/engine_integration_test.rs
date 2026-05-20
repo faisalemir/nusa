@@ -1,4 +1,4 @@
-//! End-to-end integration tests for phprt-core + phprt-gateway + phprt-config
+//! End-to-end integration tests for nusa-core + nusa-gateway + nusa-config
 //!
 //! Tests the full request lifecycle:
 //! Config → Engine → Gateway → Circuit Breaker → Response
@@ -11,9 +11,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use phprt_core::{EngineError, PhpEngine, PhpResponse, RequestContext, TenantId, TraceId};
-use phprt_gateway::circuit_breaker::CircuitBreaker;
-use phprt_plugin_api::{Plugin, PluginRegistry};
+use nusa_core::{EngineError, PhpEngine, PhpResponse, RequestContext, TenantId, TraceId};
+use nusa_gateway::circuit_breaker::CircuitBreaker;
+use nusa_plugin_api::{Plugin, PluginRegistry};
 
 // ── Mock PhpEngine for integration testing ──
 
@@ -23,7 +23,7 @@ struct MockEngine {
 
 #[async_trait::async_trait]
 impl PhpEngine for MockEngine {
-    async fn execute(&self, _ctx: RequestContext) -> phprt_core::Result<PhpResponse> {
+    async fn execute(&self, _ctx: RequestContext) -> nusa_core::Result<PhpResponse> {
         if let Some(delay) = self.delay {
             tokio::time::sleep(delay).await;
         }
@@ -54,12 +54,12 @@ impl Plugin for CountingPlugin {
         "counting-plugin"
     }
 
-    async fn pre_exec(&self, _ctx: &mut RequestContext) -> phprt_core::Result<()> {
+    async fn pre_exec(&self, _ctx: &mut RequestContext) -> nusa_core::Result<()> {
         self.pre_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         Ok(())
     }
 
-    async fn post_exec(&self, _ctx: &RequestContext) -> phprt_core::Result<()> {
+    async fn post_exec(&self, _ctx: &RequestContext) -> nusa_core::Result<()> {
         self.post_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         Ok(())
     }

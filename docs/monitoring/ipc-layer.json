@@ -1,0 +1,32 @@
+# Grafana Dashboard: IPC Layer
+{
+  "dashboard": {
+    "title": "Nusa IPC Layer",
+    "panels": [
+      {
+        "title": "IPC Latency P50/P95/P99 (ms)",
+        "type": "graph",
+        "targets": [
+          {"expr": "histogram_quantile(0.50, rate(nusa_ipc_latency_ms_bucket[5m]))"},
+          {"expr": "histogram_quantile(0.95, rate(nusa_ipc_latency_ms_bucket[5m]))"},
+          {"expr": "histogram_quantile(0.99, rate(nusa_ipc_latency_ms_bucket[5m]))"}
+        ]
+      },
+      {
+        "title": "IPC Frame Size Distribution",
+        "type": "heatmap",
+        "targets": [{"expr": "rate(nusa_ipc_frame_size_bytes_bucket[5m])"}]
+      },
+      {
+        "title": "IPC Errors by Type",
+        "type": "bar",
+        "targets": [{"expr": "rate(nusa_ipc_errors_total[5m])", "by": "error_type"}]
+      },
+      {
+        "title": "Heartbeat Misses",
+        "type": "graph",
+        "targets": [{"expr": "rate(nusa_heartbeat_misses_total[5m])"}]
+      }
+    ]
+  }
+}

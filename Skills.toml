@@ -1,0 +1,53 @@
+# Skills Configuration for Nusa PHP Runtime
+# Follows rust-skills meta-cognition framework (https://github.com/actionbook/rust-skills)
+
+project:
+  name: nusa
+  description: Rust-orchestrated PHP runtime for Laravel
+  language: rust
+  edition: 2024
+
+# Layer 3: Domain Skills — applied when building specific domains
+domains:
+  - web          # HTTP services, middleware, routing
+  - cloud-native # Kubernetes, observability, SRE, TLS
+  - cli          # CLI tools, subcommands
+  - fintech      # Precision, decimal handling (for billing)
+
+# Layer 2: Design Skills — applied for architectural decisions
+design:
+  - m09-domain   # Domain modeling, aggregate roots, VFS abstraction
+  - m05-type-driven  # Newtypes, type state, sealed traits
+  - m04-zero-cost    # Generics, traits, static dispatch
+  - m12-lifecycle    # RAII, resource lifecycle, init→serve→shutdown
+  - m13-domain-error # Error categorization, recovery strategies
+  - m10-performance  # Benchmarks, profiling, optimization
+
+# Layer 1: Mechanics Skills — applied for Rust language correctness
+mechanics:
+  - m01-ownership    # Borrow checker, lifetime, move semantics
+  - m02-resource     # Smart pointers, RAII, Drop
+  - m03-mutability   # Interior mutability, Mutex, RwLock, Atomic
+  - m06-error-handling # Result, Option, thiserror, anyhow
+  - m07-concurrency  # Tokio, channels, JoinSet, Send/Sync
+  - m15-anti-pattern # Code review, anti-pattern detection
+
+# Coding Style
+coding-style:
+  guidelines: e:\Source Code\nusa\.agents\skills\coding-guidelines\SKILL.md
+  rules:
+    - no get_ prefix on accessors
+    - snake_case for functions/variables
+    - PascalCase for types/traits
+    - meaningful names (no x, y, tmp unless scope < 5 lines)
+    - #![deny(unsafe_code)] in all crates except nusa-engine-ffi
+    - No unwrap() in library code — use expect() with context or ?
+    - All unsafe blocks require // SAFETY: comments
+
+# CI Enforcement
+ci:
+  - cargo fmt --check
+  - cargo clippy --workspace -- -D warnings
+  - cargo test --workspace
+  - cargo audit
+  - cargo deny

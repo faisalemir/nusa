@@ -38,7 +38,7 @@ COPY . .
 # Build static binary
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/target \
-    cargo build --release --target x86_64-unknown-linux-musl --bin phprt
+    cargo build --release --target x86_64-unknown-linux-musl --bin nusa
 
 # === Stage 3: Runtime ===
 FROM alpine:3.19 AS runtime
@@ -47,15 +47,15 @@ FROM alpine:3.19 AS runtime
 RUN apk add --no-cache \
     ca-certificates tzdata \
     php8-cli php8-json php8-mbstring php8-pdo php8-sqlite3 \
-    && addgroup -g 1000 phprt \
-    && adduser -u 1000 -G phprt -s /bin/sh -D phprt \
-    && mkdir -p /app/public /tmp/phprt /app/.octane \
-    && chown -R phprt:phprt /app /tmp/phprt
+    && addgroup -g 1000 nusa \
+    && adduser -u 1000 -G nusa -s /bin/sh -D nusa \
+    && mkdir -p /app/public /tmp/nusa /app/.octane \
+    && chown -R nusa:nusa /app /tmp/nusa
 
 WORKDIR /app
 
 # Copy Rust binary
-COPY --from=rust-builder /src/target/x86_64-unknown-linux-musl/release/phprt /bin/phprt
+COPY --from=rust-builder /src/target/x86_64-unknown-linux-musl/release/nusa /bin/nusa
 COPY --chmod=0644 config.toml.example /app/config.toml
 
 # Copy PHP driver
@@ -64,18 +64,18 @@ ENV PATH="/usr/local/php/bin:$PATH"
 
 COPY php-driver/ /app/php-driver/
 
-RUN chmod +x /bin/phprt
+RUN chmod +x /bin/nusa
 
-VOLUME ["/app/public", "/tmp/phprt"]
+VOLUME ["/app/public", "/tmp/nusa"]
 
 ENV RUST_LOG=info \
     PHPRT_VFS_ROOT=/app/public \
-    PHPRT_TMP_DIR=/tmp/phprt
+    PHPRT_TMP_DIR=/tmp/nusa
 
 EXPOSE 8080 9090
-USER phprt
+USER nusa
 
-ENTRYPOINT ["/bin/phprt"]
+ENTRYPOINT ["/bin/nusa"]
 CMD ["--config", "/app/config.toml"]
 
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \

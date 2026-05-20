@@ -19,3 +19,9 @@ target/
 
 # Docs (blueprint plans)
 docs/plan
+
+
+.cowork/
+.cursor/
+skills-lock.json
+Cargo.lock

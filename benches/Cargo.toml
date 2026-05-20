@@ -1,5 +1,5 @@
 [package]
-name = "phprt-benchmarks"
+name = "nusa-benchmarks"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
@@ -15,10 +15,20 @@ name = "ipc_bench"
 path = "src/ipc_bench.rs"
 harness = false
 
+[[bench]]
+name = "cold_start_bench"
+path = "src/cold_start_bench.rs"
+harness = false
+
+[[bench]]
+name = "ipc_latency_bench"
+path = "src/ipc_latency_bench.rs"
+harness = false
+
 [dependencies]
-phprt-core = { path = "../crates/phprt-core" }
-phprt-gateway = { path = "../crates/phprt-gateway" }
-phprt-ipc = { path = "../crates/phprt-ipc" }
+nusa-core = { path = "../crates/nusa-core" }
+nusa-gateway = { path = "../crates/nusa-gateway" }
+nusa-ipc = { path = "../crates/nusa-ipc" }
 criterion = "0.5"
 tokio.workspace = true
 bytes.workspace = true

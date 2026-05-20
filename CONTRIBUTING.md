@@ -17,7 +17,7 @@ Major changes require an RFC.
 5. Merge if approved by maintainers.
 
 ## Code Standards
-- **Safety:** `#![deny(unsafe_code)]` is mandatory outside `phprt-engine-ffi`.
+- **Safety:** `#![deny(unsafe_code)]` is mandatory outside `nusa-engine-ffi`.
 - **Errors:** Use `thiserror` for domain errors. No `unwrap()` in library code.
 - **Naming:** No `get_` prefix. snake_case (fn/var), CamelCase (type), SCREAMING_CASE (const).
 - **Formatting:** Run `cargo fmt` before committing.
@@ -32,4 +32,4 @@ Use the provided issue templates. Include:
 - Logs (with `RUST_LOG=debug`)
 
 ## Security Vulnerabilities
-Please report security vulnerabilities to `security@phprt.dev`. Do not open public issues. See `SECURITY.md` for details.
+Please report security vulnerabilities to `security@nusa.dev`. Do not open public issues. See `SECURITY.md` for details.

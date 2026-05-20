@@ -22,12 +22,12 @@ jobs:
           targets: x86_64-unknown-linux-musl
 
       - name: Build Release
-        run: cargo build --release --target x86_64-unknown-linux-musl --bin phprt
+        run: cargo build --release --target x86_64-unknown-linux-musl --bin nusa
 
       - name: Generate SBOM
         uses: anchore/sbom-action@v0
         with:
-          image: phprt:${{ github.ref_name }}
+          image: nusa:${{ github.ref_name }}
           format: spdx-json
           output-file: sbom.spdx.json
 
@@ -37,13 +37,13 @@ jobs:
           cosign sign-blob \
             --key env://COSIGN_PRIVATE_KEY \
             --yes \
-            target/x86_64-unknown-linux-musl/release/phprt > phprt.sig
+            target/x86_64-unknown-linux-musl/release/nusa > nusa.sig
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            target/x86_64-unknown-linux-musl/release/phprt
-            phprt.sig
+            target/x86_64-unknown-linux-musl/release/nusa
+            nusa.sig
             sbom.spdx.json
           generate_release_notes: true

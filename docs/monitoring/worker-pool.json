@@ -1,0 +1,31 @@
+# Grafana Dashboard: Worker Pool
+{
+  "dashboard": {
+    "title": "Nusa Worker Pool",
+    "panels": [
+      {
+        "title": "Pool Size",
+        "type": "stat",
+        "targets": [{"expr": "nusa_worker_pool_size"}]
+      },
+      {
+        "title": "RSS per Worker (MB)",
+        "type": "graph",
+        "targets": [{"expr": "nusa_worker_rss_mb"}]
+      },
+      {
+        "title": "Worker Recycle Rate",
+        "type": "graph",
+        "targets": [{"expr": "rate(nusa_worker_recycles_total[5m])"}]
+      },
+      {
+        "title": "Idle vs Busy Workers",
+        "type": "piechart",
+        "targets": [
+          {"expr": "nusa_worker_idle_count", "legend": "Idle"},
+          {"expr": "nusa_worker_pool_size - nusa_worker_idle_count", "legend": "Busy"}
+        ]
+      }
+    ]
+  }
+}

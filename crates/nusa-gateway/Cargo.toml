@@ -1,0 +1,41 @@
+[package]
+name = "nusa-gateway"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Axum HTTP gateway with middleware chain"
+
+[dependencies]
+nusa-core = { path = "../nusa-core" }
+nusa-plugin-api = { path = "../nusa-plugin-api" }
+nusa-telemetry = { path = "../nusa-telemetry" }
+nusa-octane-worker = { path = "../nusa-octane-worker" }
+nusa-ipc = { path = "../nusa-ipc" }
+nusa-config = { path = "../nusa-config" }
+axum.workspace = true
+tower.workspace = true
+tower-http.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+metrics.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+http.workspace = true
+parking_lot.workspace = true
+arc-swap.workspace = true
+dashmap.workspace = true
+moka.workspace = true
+tokio-tungstenite.workspace = true
+redis.workspace = true
+futures.workspace = true
+async-stream.workspace = true
+rustls = "0.23"
+rustls-pemfile = "2"
+anyhow.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full"] }
+bytes.workspace = true
+async-trait.workspace = true
