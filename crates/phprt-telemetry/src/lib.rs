@@ -5,6 +5,9 @@
 //! - `m10-performance`: Batch OTLP exporter, global Prometheus recorder
 //! - `m07-concurrency`: Global recorder setup once
 
+#![deny(unsafe_code)]
+#![warn(clippy::all)]
+
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use opentelemetry::global;
@@ -72,6 +75,7 @@ pub struct NusaMetrics {
 }
 
 impl NusaMetrics {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             requests_total: AtomicU64::new(0),

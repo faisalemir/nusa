@@ -1,3 +1,9 @@
+//! IPC framing codec for tokio-util.
+//!
+//! Skills applied:
+//! - `m06-error-handling`: IO errors propagate properly
+//! - `m11-ecosystem`: tokio-util codec integration
+
 use bytes::BytesMut;
 use tokio_util::codec::{Decoder, Encoder};
 

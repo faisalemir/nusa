@@ -1,3 +1,9 @@
+//! Domain-specific errors mapped to HTTP status codes.
+//!
+//! Skills applied:
+//! - `m06-error-handling`: thiserror for library errors, explicit status mapping
+//! - `m09-domain`: Error variants reflect domain concepts (Sandbox, PhpFatal, etc.)
+
 use thiserror::Error;
 
 /// Domain-specific errors mapped to HTTP status codes (m06-error-handling)

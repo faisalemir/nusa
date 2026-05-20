@@ -1,6 +1,11 @@
 #![deny(unsafe_code)]
 #![warn(clippy::all)]
 
+//! CLI argument parsing for the phprt binary.
+//!
+//! Skills applied:
+//! - `domain-cli`: clap derive for argument parsing
+
 use clap::Parser;
 
 #[derive(Parser)]

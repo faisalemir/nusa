@@ -1,14 +1,21 @@
+//! Child process engine and process lifecycle management.
+//!
+//! Skills applied:
+//! - `m07-concurrency`: tokio::process for async child management
+//! - `m12-lifecycle`: Spawn→communicate→shutdown phases
+//! - `m06-error-handling`: IO errors propagate properly
+
 use async_trait::async_trait;
 use tracing::info;
 
 use phprt_core::{PhpEngine, RequestContext, PhpResponse, Result};
 
-/// PHP engine running as child processes.
-///
-/// m07-concurrency: tokio::process for async spawning
-/// m12-lifecycle: spawn→communicate→kill
-/// m06-error-handling: process exit codes -> EngineError
-/// domain-cloud-native: OS-level isolation
+// PHP engine running as child processes.
+//
+// m07-concurrency: tokio::process for async spawning
+// m12-lifecycle: spawn→communicate→kill
+// m06-error-handling: process exit codes -> EngineError
+// domain-cloud-native: OS-level isolation
 pub struct ChildEngine {
     #[allow(dead_code)]
     php_binary: std::path::PathBuf,

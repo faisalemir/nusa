@@ -1,15 +1,10 @@
 //! State reset orchestrator for Octane event hooks.
 //!
-//! Manages lifecycle events that mirror Octane's event system:
-//! - `worker_started` — initial state setup
-//! - `request_received` — pre-request state flush
-//! - `request_terminated` — post-request cleanup
-//! - `worker_stopping` — final cleanup before worker recycle/shutdown
-//!
-//! m12-lifecycle: explicit init -> execute -> shutdown phases.
-
-use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
+//! Skills applied:
+//! - `m12-lifecycle`: Event-driven state management for worker lifecycle
+//! - `m07-concurrency`: Broadcast channel for async event propagation
+//! - `m09-domain`: Domain events reflect Octane's contract (RequestReceived, WorkerStopping)
+//! - `m07-concurrency`: AtomicU64 for lock-free statistics counters
 
 use tracing::info;
 
@@ -42,9 +37,9 @@ type ResetAction = Box<dyn Fn(&OctaneEvent) + Send + Sync>;
 ///
 /// Follows m12-lifecycle pattern: init -> execute -> shutdown.
 pub struct StateResetOrchestrator {
-    stats: AtomicU64,
+    stats: std::sync::atomic::AtomicU64,
     event_tx: tokio::sync::broadcast::Sender<OctaneEvent>,
-    reset_actions: HashMap<String, ResetAction>,
+    reset_actions: std::collections::HashMap<String, ResetAction>,
 }
 
 impl StateResetOrchestrator {
@@ -52,13 +47,14 @@ impl StateResetOrchestrator {
     pub fn new(event_buffer_size: usize) -> Self {
         let (event_tx, _) = tokio::sync::broadcast::channel(event_buffer_size);
         Self {
-            stats: AtomicU64::new(0),
+            stats: std::sync::atomic::AtomicU64::new(0),
             event_tx,
-            reset_actions: HashMap::new(),
+            reset_actions: std::collections::HashMap::new(),
         }
     }
 
     /// Subscribe to the event channel.
+    #[must_use]
     pub fn subscribe(&self) -> tokio::sync::broadcast::Receiver<OctaneEvent> {
         self.event_tx.subscribe()
     }
@@ -89,14 +85,15 @@ impl StateResetOrchestrator {
         let _ = self.event_tx.send(event);
 
         // Increment stats
-        self.stats.fetch_add(1, Ordering::Relaxed);
+        self.stats.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
         Ok(())
     }
 
     /// Return current statistics.
+    #[must_use]
     pub fn stats(&self) -> StateResetStats {
-        let total = self.stats.load(Ordering::Relaxed);
+        let total = self.stats.load(std::sync::atomic::Ordering::Relaxed);
         StateResetStats {
             total_requests_processed: total,
             total_resets_performed: total,

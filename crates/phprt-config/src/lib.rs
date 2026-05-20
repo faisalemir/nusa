@@ -1,6 +1,13 @@
 #![deny(unsafe_code)]
 #![warn(clippy::all)]
 
+//! Configuration management with hot-reload support.
+//!
+//! Skills applied:
+//! - `m03-mutability`: ArcSwap for atomic config swap without Mutex
+//! - `m12-lifecycle`: Load → watch → reload lifecycle
+//! - `m07-concurrency`: LazyLock for global config initialization
+
 use std::sync::LazyLock;
 use std::time::Duration;
 

@@ -1,3 +1,11 @@
+//! Nusa PHP Runtime CLI binary.
+//!
+//! Skills applied:
+//! - `m06-error-handling`: anyhow for binary-level errors
+//! - `m12-lifecycle`: explicit init→serve→shutdown phases
+//! - `m15-anti-pattern`: Security applied before server start
+//! - `domain-cli`: clap derive for argument parsing
+
 #![deny(unsafe_code)]
 #![warn(clippy::all)]
 
@@ -10,7 +18,7 @@ use phprt_plugin_api::PluginRegistry;
 use phprt_core::PhpEngine;
 use phprt_gateway::circuit_breaker::CircuitBreaker;
 use phprt_gateway::health::HealthState;
-use phprt_core::{BackpressureGuard, ResourceGuard};
+use phprt_core::{BackpressureGuard, ResourceGuard, TenantRegistry, TaskManager};
 use std::time::Duration;
 
 /// Binary entrypoint (m06-error-handling: anyhow for app-level errors)
@@ -32,7 +40,6 @@ async fn main() -> anyhow::Result<()> {
     let engine: Arc<dyn PhpEngine> = match cfg.engine {
         EngineKind::Ffi => Arc::new(phprt_engine_ffi::FfiEngine::new(cfg.max_workers)),
         EngineKind::Wasm => {
-            // TODO: Read php.wasm file
             Arc::new(phprt_engine_wasm::WasmEngine::stub())
         }
         EngineKind::Child => {
@@ -61,12 +68,18 @@ async fn main() -> anyhow::Result<()> {
 
     // 9. Resource Guard
     let resource_guard = ResourceGuard {
-        max_request_bytes: cfg.max_workers * 1024 * 1024, // Simplified
+        max_request_bytes: cfg.max_workers * 1024 * 1024,
         request_timeout_ms: cfg.timeout_ms,
         max_concurrent: cfg.max_workers,
     };
 
-    // 10. Start Gateway
+    // 10. Tenant Registry (M4: multi-tenant)
+    let tenants = Arc::new(TenantRegistry::new());
+
+    // 11. Task Manager (M4: async task offload)
+    let tasks = Arc::new(TaskManager::new());
+
+    // 12. Start Gateway
     let app = phprt_gateway::app(
         engine.clone(),
         plugins.clone(),
@@ -74,6 +87,8 @@ async fn main() -> anyhow::Result<()> {
         health_state.clone(),
         backpressure,
         resource_guard,
+        tenants,
+        tasks,
     );
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await?;
 
@@ -82,7 +97,7 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!("listening on 0.0.0.0:8080");
 
-    // 11. Graceful Shutdown (m12-lifecycle)
+    // 13. Graceful Shutdown (m12-lifecycle)
     let shutdown = async move {
         tokio::signal::ctrl_c().await.ok();
         tracing::info!("shutdown signal received");

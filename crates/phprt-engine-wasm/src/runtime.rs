@@ -1,24 +1,29 @@
-/// WASM runtime manager for the PHP WASM engine.
-///
-/// m03-mutability: StoreLimits provides interior mutability for memory/fuel caps.
-/// m12-lifecycle: WASM Store lifecycle management.
+//! WASM runtime manager for the PHP WASM engine.
+//!
+//! Skills applied:
+//! - `m03-mutability`: StoreLimits provides interior mutability for resource caps
+//! - `m12-lifecycle`: WASM Store lifecycle management
+
 pub struct WasmRuntime {
     engine: wasmtime::Engine,
     memory_limit_bytes: u64,
 }
 
 impl WasmRuntime {
-    pub fn new(_wasm_bytes: &[u8], memory_mb: u64) -> anyhow::Result<Self> {
+    /// Create a new WASM runtime with the given memory limit.
+    #[must_use]
+    pub fn new(_wasm_bytes: &[u8], memory_mb: u64) -> Self {
         let memory_limit_bytes = memory_mb * 1024 * 1024;
 
         let config = wasmtime::Config::new();
 
-        let engine = wasmtime::Engine::new(&config)?;
+        let engine = wasmtime::Engine::new(&config)
+            .expect("Failed to create wasmtime engine");
 
-        Ok(Self {
+        Self {
             engine,
             memory_limit_bytes,
-        })
+        }
     }
 
     /// Create a new WASI store with preopened directories and memory limits.
@@ -42,6 +47,8 @@ impl WasmRuntime {
         wasmtime::Module::new(&self.engine, bytes)
     }
 
+    /// Return memory limit in bytes.
+    #[must_use]
     pub fn memory_limit_bytes(&self) -> u64 {
         self.memory_limit_bytes
     }

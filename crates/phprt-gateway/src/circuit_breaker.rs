@@ -1,3 +1,10 @@
+//! Circuit breaker state machine for traffic protection.
+//!
+//! Skills applied:
+//! - `m13-domain-error`: Protects against cascading failures
+//! - `m07-concurrency`: Single Mutex prevents race conditions
+//! - `m15-anti-pattern`: All state mutations under one lock
+
 use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;

@@ -1,6 +1,12 @@
 #![deny(unsafe_code)]
 #![warn(clippy::all)]
 
+//! Security: Landlock and Seccomp-BPF sandboxing for PHP processes.
+//!
+//! Skills applied:
+//! - `domain-cloud-native`: Minimal privilege, syscall whitelist
+//! - `m15-anti-pattern`: Security as code, not afterthought
+
 pub mod landlock;
 pub mod seccomp;
 

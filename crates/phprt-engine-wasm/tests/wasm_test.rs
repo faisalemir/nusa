@@ -3,10 +3,8 @@
 //! Skills applied:
 //! - `m03-mutability`: StoreLimits interior mutability
 //! - `m06-error-handling`: WASM trap → EngineError::Sandbox
-//! - `m12-lifecycle`: init → execute → shutdown
+//! - `m12-lifecycle`: init → execute → shutdown phases
 
-use bytes::Bytes;
-use http::HeaderMap;
 use phprt_core::{PhpEngine, RequestContext, TenantId};
 use phprt_engine_wasm::WasmEngine;
 use phprt_engine_wasm::runtime::WasmRuntime;
@@ -90,9 +88,9 @@ async fn wasm_engine_execute_returns_empty_headers() {
 #[tokio::test]
 async fn wasm_engine_execute_with_body_and_headers() {
     let engine = WasmEngine::stub();
-    let mut headers = HeaderMap::new();
+    let mut headers = http::HeaderMap::new();
     headers.insert("x-test", "value".parse().unwrap());
-    let body = Bytes::from("test body");
+    let body = bytes::Bytes::from("test body");
     let ctx = RequestContext::new(
         PathBuf::from("/app/public"),
         PathBuf::from("index.php"),
@@ -102,7 +100,6 @@ async fn wasm_engine_execute_with_body_and_headers() {
     .with_body(body);
 
     let resp = engine.execute(ctx).await.unwrap();
-    // Stub ignores input headers/body, returns its own response
     assert_eq!(resp.status, 200);
 }
 
@@ -168,7 +165,7 @@ async fn wasm_engine_shutdown_does_not_panic() {
 async fn wasm_engine_shutdown_is_idempotent() {
     let engine = WasmEngine::stub();
     engine.shutdown().await;
-    engine.shutdown().await; // Second shutdown should not panic
+    engine.shutdown().await;
 }
 
 #[tokio::test]
@@ -176,7 +173,6 @@ async fn wasm_engine_shutdown_then_execute() {
     let engine = WasmEngine::stub();
     engine.shutdown().await;
 
-    // After shutdown, stub still returns a response (not production behavior)
     let ctx = RequestContext::new(
         PathBuf::from("/app/public"),
         PathBuf::from("index.php"),
@@ -192,14 +188,13 @@ async fn wasm_engine_shutdown_then_execute() {
 
 #[tokio::test]
 async fn wasm_engine_execute_is_send_safe() {
-    let engine = Arc::new(WasmEngine::stub());
+    let engine = std::sync::Arc::new(WasmEngine::stub());
     let ctx = RequestContext::new(
         PathBuf::from("/app/public"),
         PathBuf::from("index.php"),
         tokio::time::Instant::now() + Duration::from_secs(30),
     );
 
-    // Move engine into spawned task
     let handle = tokio::spawn({
         let engine = engine.clone();
         async move { engine.execute(ctx).await }
@@ -215,49 +210,47 @@ async fn wasm_engine_execute_is_send_safe() {
 
 #[tokio::test]
 async fn wasm_runtime_creates_with_valid_memory_limit() {
-    let runtime = WasmRuntime::new(&[], 512).unwrap();
+    let runtime = WasmRuntime::new(&[], 512);
     assert_eq!(runtime.memory_limit_bytes(), 512 * 1024 * 1024);
 }
 
 #[tokio::test]
 async fn wasm_runtime_memory_limit_zero_bytes() {
-    let runtime = WasmRuntime::new(&[], 0).unwrap();
+    let runtime = WasmRuntime::new(&[], 0);
     assert_eq!(runtime.memory_limit_bytes(), 0);
 }
 
 #[tokio::test]
 async fn wasm_runtime_memory_limit_large() {
-    let runtime = WasmRuntime::new(&[], 2048).unwrap();
+    let runtime = WasmRuntime::new(&[], 2048);
     assert_eq!(runtime.memory_limit_bytes(), 2048 * 1024 * 1024);
 }
 
 #[tokio::test]
 async fn wasm_runtime_create_store_succeeds() {
-    let runtime = WasmRuntime::new(&[], 256).unwrap();
+    let runtime = WasmRuntime::new(&[], 256);
     let store = runtime.create_store(&PathBuf::from("/tmp/test")).await;
     assert!(store.is_ok(), "create_store must succeed on stub");
 }
 
 #[tokio::test]
 async fn wasm_runtime_create_store_with_nonexistent_dir() {
-    let runtime = WasmRuntime::new(&[], 256).unwrap();
+    let runtime = WasmRuntime::new(&[], 256);
     let store = runtime.create_store(&PathBuf::from("/nonexistent/dir")).await;
     assert!(store.is_ok(), "create_store must succeed even with nonexistent dir");
 }
 
 #[test]
 fn wasm_runtime_load_module_empty_bytes_fails() {
-    let runtime = WasmRuntime::new(&[], 256).unwrap();
+    let runtime = WasmRuntime::new(&[], 256);
     let result = runtime.load_module(&[]);
     assert!(result.is_err(), "empty bytes must fail module loading");
 }
 
 #[test]
 fn wasm_runtime_load_module_garbage_bytes_fails() {
-    let runtime = WasmRuntime::new(&[], 256).unwrap();
+    let runtime = WasmRuntime::new(&[], 256);
     let garbage = vec![0xDE, 0xAD, 0xBE, 0xEF];
     let result = runtime.load_module(&garbage);
     assert!(result.is_err(), "garbage bytes must fail module loading");
 }
-
-use std::sync::Arc;

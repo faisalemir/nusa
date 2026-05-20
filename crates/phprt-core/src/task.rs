@@ -3,6 +3,7 @@
 //! Skills applied:
 //! - `m07-concurrency`: Tokio task spawn, channel-based result routing
 //! - `m13-domain-error`: Task timeout, error propagation
+//! - `coding-guidelines`: Clean API with no unwrap calls
 
 use std::collections::HashMap;
 
@@ -10,7 +11,7 @@ use parking_lot::Mutex;
 use tokio::sync::oneshot;
 
 /// Task types that can be offloaded from PHP to Rust.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub enum OffloadTask {
     /// HTTP GET/POST request
     HttpRequest {
@@ -21,7 +22,7 @@ pub enum OffloadTask {
     },
     /// File I/O operation
     FileOperation {
-        operation: String, // "read", "write", "delete"
+        operation: String,
         path: String,
         data: Option<Vec<u8>>,
     },
@@ -33,7 +34,7 @@ pub enum OffloadTask {
 }
 
 /// Result of an offloaded task.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TaskResult {
     pub success: bool,
     pub data: Vec<u8>,

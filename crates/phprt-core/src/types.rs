@@ -1,3 +1,10 @@
+//! Newtype wrappers and request/response types.
+//!
+//! Skills applied:
+//! - `m05-type-driven`: Newtype wrappers (TraceId, TenantId, WorkerId)
+//! - `m09-domain`: RequestContext as aggregate root, immutable after construction
+//! - `coding-guidelines`: No get_ prefix on accessors
+
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;

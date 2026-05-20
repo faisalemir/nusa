@@ -1,6 +1,13 @@
 #![deny(unsafe_code)]
 #![warn(clippy::all)]
 
+//! Plugin system for pre/post execution hooks in the request lifecycle.
+//!
+//! Skills applied:
+//! - `m04-zero-cost`: Trait-based plugin abstraction
+//! - `m09-domain`: Plugin registry as domain service
+//! - `m07-concurrency`: Clone Arc refs outside lock, drop guard before await
+
 use std::sync::Arc;
 
 use phprt_core::{RequestContext, Result};

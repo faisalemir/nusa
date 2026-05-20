@@ -1,3 +1,9 @@
+//! IPC protocol messages and framing.
+//!
+//! Skills applied:
+//! - `m06-error-handling`: serde errors propagate as Results
+//! - `m11-ecosystem`: serde + rmp-serde for cross-platform serialization
+
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};

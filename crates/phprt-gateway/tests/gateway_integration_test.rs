@@ -1,7 +1,10 @@
 //! Detailed integration tests for phprt-gateway
 //!
-//! Tests: HTTP handling, resource guards, backpressure, health probes
-//! Skills: domain-web, m07-concurrency, m13-domain-error, m06-error-handling
+//! Skills applied:
+//! - `domain-web`: HTTP request handling, middleware chain
+//! - `m07-concurrency`: Arc<dyn PhpEngine> shared across handlers
+//! - `m13-domain-error`: Error → HTTP status mapping
+//! - `m06-error-handling`: Result propagation, status mapping
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -17,7 +20,7 @@ use tower::ServiceExt;
 
 use phprt_core::{
     PhpEngine, PhpResponse, RequestContext,
-    BackpressureGuard, ResourceGuard,
+    BackpressureGuard, ResourceGuard, TenantRegistry, TaskManager,
 };
 use phprt_gateway::{app, health::HealthState};
 use phprt_gateway::circuit_breaker::CircuitBreaker;
@@ -61,10 +64,12 @@ fn build_test_app(engine: Arc<dyn PhpEngine>) -> Router {
         Arc::new(HealthState::new()),
         Arc::new(BackpressureGuard::new(100)),
         ResourceGuard {
-            max_request_bytes: 1024, // 1KB limit for testing
+            max_request_bytes: 1024,
             request_timeout_ms: 5000,
             max_concurrent: 5,
         },
+        Arc::new(TenantRegistry::new()),
+        Arc::new(TaskManager::new()),
     )
 }
 
@@ -134,6 +139,8 @@ async fn test_ready_endpoint_becomes_ready_after_mark() {
         health.clone(),
         Arc::new(BackpressureGuard::new(100)),
         ResourceGuard::default(),
+        Arc::new(TenantRegistry::new()),
+        Arc::new(TaskManager::new()),
     );
 
     let request = Request::builder()
@@ -177,6 +184,8 @@ async fn test_circuit_breaker_opens_after_threshold() {
         Arc::new(HealthState::new()),
         Arc::new(BackpressureGuard::new(100)),
         ResourceGuard::default(),
+        Arc::new(TenantRegistry::new()),
+        Arc::new(TaskManager::new()),
     );
 
     for _ in 0..2 {

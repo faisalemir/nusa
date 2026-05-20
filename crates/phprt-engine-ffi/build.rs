@@ -1,11 +1,10 @@
-/// Build script for generating FFI bindings to libphp (ZTS).
-///
-/// unsafe-checker: This build script is safe — it only invokes bindgen.
-/// The generated bindings will be used in engine.rs with SAFETY comments.
-///
-/// Environment variables:
-///   PHP_INCLUDE_DIR — path to PHP include directory (default: /usr/include/php)
-///   PHP_SAPI_DIR    — path to SAPI embed directory
+//! Build script for generating FFI bindings to libphp (ZTS).
+//!
+//! Skills applied:
+//! - `m11-ecosystem`: bindgen for FFI code generation
+//! - `unsafe-checker`: Only generates code, no unsafe execution
+//! - `coding-guidelines`: Environment variable defaults with unwrap_or_else
+
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=wrapper.h");

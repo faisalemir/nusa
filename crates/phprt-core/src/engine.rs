@@ -1,3 +1,10 @@
+//! PhpEngine trait for engine-agnostic dispatch.
+//!
+//! Skills applied:
+//! - `m09-domain`: Engine abstraction allows swapping implementations
+//! - `m04-zero-cost`: dyn Trait for runtime dispatch
+//! - `coding-guidelines`: No get_ prefix on trait methods
+
 use async_trait::async_trait;
 
 use crate::{PhpResponse, RequestContext, Result};

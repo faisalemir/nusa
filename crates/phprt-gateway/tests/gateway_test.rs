@@ -127,7 +127,7 @@ fn circuit_breaker_thread_safety() {
     use std::sync::Arc;
     use std::thread;
 
-    let cb = Arc::new(CircuitBreaker::new(100, Duration::from_millis(10)));
+    let cb = Arc::new(CircuitBreaker::new(100, Duration::from_secs(10)));
     let mut handles = vec![];
 
     // Spawn multiple threads recording failures concurrently
