@@ -1,5 +1,6 @@
 #![deny(unsafe_code)]
 #![warn(clippy::all)]
+#![allow(missing_docs)]
 
 //! Security: Landlock and Seccomp-BPF sandboxing for PHP processes.
 //!

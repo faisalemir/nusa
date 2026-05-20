@@ -31,7 +31,6 @@ pub struct TenantRegistry {
 }
 
 impl TenantRegistry {
-    #[must_use]
     pub fn new() -> Self {
         Self {
             tenants: HashMap::new(),

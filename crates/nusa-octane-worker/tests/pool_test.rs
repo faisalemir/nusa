@@ -7,8 +7,8 @@
 //! - `m06-error-handling`: Result propagation through worker operations
 
 use std::path::PathBuf;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use tokio::sync::Mutex;
@@ -21,14 +21,12 @@ use nusa_octane_worker::state_reset::{OctaneEvent, StateResetOrchestrator};
 #[tokio::test]
 async fn worker_spawn_creates_stub_on_non_unix() {
     // On Windows, Worker::spawn returns a stub worker
-    let result = Worker::spawn(
-        0,
-        PathBuf::from("/tmp/test"),
-        512,
-    )
-    .await;
+    let result = Worker::spawn(0, PathBuf::from("/tmp/test"), 512).await;
 
-    assert!(result.is_ok(), "Worker stub creation must succeed on non-Unix");
+    assert!(
+        result.is_ok(),
+        "Worker stub creation must succeed on non-Unix"
+    );
     let worker = result.unwrap();
     assert_eq!(worker.id, 0);
     assert_eq!(worker.state, WorkerState::Idle);
@@ -38,13 +36,9 @@ async fn worker_spawn_creates_stub_on_non_unix() {
 
 #[tokio::test]
 async fn worker_handle_request_fails_on_stub() {
-    let mut worker = Worker::spawn(
-        0,
-        PathBuf::from("/tmp/test"),
-        512,
-    )
-    .await
-    .unwrap();
+    let mut worker = Worker::spawn(0, PathBuf::from("/tmp/test"), 512)
+        .await
+        .unwrap();
 
     let result = worker
         .handle_request("GET".into(), "/index.php".into(), 5000)
@@ -64,13 +58,9 @@ async fn worker_handle_request_fails_on_stub() {
 
 #[tokio::test]
 async fn worker_stop_transitions_to_stopped() {
-    let mut worker = Worker::spawn(
-        0,
-        PathBuf::from("/tmp/test"),
-        512,
-    )
-    .await
-    .unwrap();
+    let mut worker = Worker::spawn(0, PathBuf::from("/tmp/test"), 512)
+        .await
+        .unwrap();
 
     assert_eq!(worker.state, WorkerState::Idle);
 
@@ -85,13 +75,9 @@ async fn worker_stop_transitions_to_stopped() {
 
 #[tokio::test]
 async fn worker_should_recycle_by_requests() {
-    let worker = Worker::spawn(
-        0,
-        PathBuf::from("/tmp/test"),
-        512,
-    )
-    .await
-    .unwrap();
+    let worker = Worker::spawn(0, PathBuf::from("/tmp/test"), 512)
+        .await
+        .unwrap();
 
     // Set request count manually
     worker.requests_handled.store(1000, Ordering::SeqCst);
@@ -108,13 +94,9 @@ async fn worker_should_recycle_by_requests() {
 
 #[tokio::test]
 async fn worker_should_recycle_by_memory() {
-    let worker = Worker::spawn(
-        0,
-        PathBuf::from("/tmp/test"),
-        512,
-    )
-    .await
-    .unwrap();
+    let worker = Worker::spawn(0, PathBuf::from("/tmp/test"), 512)
+        .await
+        .unwrap();
 
     worker.rss_mb.store(800, Ordering::SeqCst);
 
@@ -131,13 +113,9 @@ async fn worker_should_recycle_by_memory() {
 #[tokio::test]
 async fn worker_atomic_counters_are_thread_safe() {
     let worker = Arc::new(
-        Worker::spawn(
-            0,
-            PathBuf::from("/tmp/test"),
-            512,
-        )
-        .await
-        .unwrap(),
+        Worker::spawn(0, PathBuf::from("/tmp/test"), 512)
+            .await
+            .unwrap(),
     );
 
     // Simulate concurrent counter increments
@@ -166,12 +144,7 @@ async fn worker_atomic_counters_are_thread_safe() {
 
 #[tokio::test]
 async fn pool_initialization_creates_workers() {
-    let mut pool = WorkerPool::new(
-        3,
-        PathBuf::from("/tmp/test"),
-        512,
-        1000,
-    );
+    let mut pool = WorkerPool::new(3, PathBuf::from("/tmp/test"), 512, 1000);
 
     let result = pool.initialize().await;
     assert!(result.is_ok(), "Pool initialization must succeed");
@@ -180,12 +153,7 @@ async fn pool_initialization_creates_workers() {
 
 #[tokio::test]
 async fn pool_get_idle_worker_dequeues() {
-    let mut pool = WorkerPool::new(
-        2,
-        PathBuf::from("/tmp/test"),
-        512,
-        1000,
-    );
+    let mut pool = WorkerPool::new(2, PathBuf::from("/tmp/test"), 512, 1000);
 
     pool.initialize().await.unwrap();
 
@@ -206,12 +174,7 @@ async fn pool_get_idle_worker_dequeues() {
 
 #[tokio::test]
 async fn pool_return_worker_enqueues() {
-    let mut pool = WorkerPool::new(
-        2,
-        PathBuf::from("/tmp/test"),
-        512,
-        1000,
-    );
+    let mut pool = WorkerPool::new(2, PathBuf::from("/tmp/test"), 512, 1000);
 
     pool.initialize().await.unwrap();
 
@@ -236,12 +199,7 @@ async fn pool_return_worker_enqueues() {
 
 #[tokio::test]
 async fn pool_recycle_worker_replaces() {
-    let mut pool = WorkerPool::new(
-        1,
-        PathBuf::from("/tmp/test"),
-        512,
-        1000,
-    );
+    let mut pool = WorkerPool::new(1, PathBuf::from("/tmp/test"), 512, 1000);
 
     pool.initialize().await.unwrap();
     assert_eq!(pool.idle_count(), 1);
@@ -263,12 +221,7 @@ async fn pool_recycle_worker_replaces() {
 
 #[tokio::test]
 async fn pool_shutdown_clears_all() {
-    let mut pool = WorkerPool::new(
-        3,
-        PathBuf::from("/tmp/test"),
-        512,
-        1000,
-    );
+    let mut pool = WorkerPool::new(3, PathBuf::from("/tmp/test"), 512, 1000);
 
     pool.initialize().await.unwrap();
     assert_eq!(pool.worker_count(), 3);
@@ -289,18 +242,17 @@ async fn pool_shutdown_clears_all() {
 
 #[tokio::test]
 async fn pool_statistics_tracking() {
-    let mut pool = WorkerPool::new(
-        2,
-        PathBuf::from("/tmp/test"),
-        512,
-        1000,
-    );
+    let mut pool = WorkerPool::new(2, PathBuf::from("/tmp/test"), 512, 1000);
 
     pool.initialize().await.unwrap();
 
     // Simulate work
-    pool.worker_mut(0).requests_handled.store(50, Ordering::SeqCst);
-    pool.worker_mut(1).requests_handled.store(30, Ordering::SeqCst);
+    pool.worker_mut(0)
+        .requests_handled
+        .store(50, Ordering::SeqCst);
+    pool.worker_mut(1)
+        .requests_handled
+        .store(30, Ordering::SeqCst);
     pool.worker_mut(0).error_count.store(2, Ordering::SeqCst);
 
     assert_eq!(pool.total_handled(), 0); // Counter not yet aggregated
@@ -340,11 +292,7 @@ async fn orchestrator_broadcast_subscribers() {
     });
 
     // Wait for event
-    let recv_result = tokio::time::timeout(
-        Duration::from_secs(1),
-        receiver.recv(),
-    )
-    .await;
+    let recv_result = tokio::time::timeout(Duration::from_secs(1), receiver.recv()).await;
 
     assert!(
         recv_result.is_ok(),
@@ -402,13 +350,9 @@ async fn orchestrator_shutdown() {
 
 #[tokio::test]
 async fn worker_with_zero_max_requests_recycles_immediately() {
-    let worker = Worker::spawn(
-        0,
-        PathBuf::from("/tmp/test"),
-        512,
-    )
-    .await
-    .unwrap();
+    let worker = Worker::spawn(0, PathBuf::from("/tmp/test"), 512)
+        .await
+        .unwrap();
 
     // Zero requests handled, but max_requests is 0
     assert!(
@@ -419,13 +363,9 @@ async fn worker_with_zero_max_requests_recycles_immediately() {
 
 #[tokio::test]
 async fn worker_with_zero_max_memory_recycles_immediately() {
-    let worker = Worker::spawn(
-        0,
-        PathBuf::from("/tmp/test"),
-        512,
-    )
-    .await
-    .unwrap();
+    let worker = Worker::spawn(0, PathBuf::from("/tmp/test"), 512)
+        .await
+        .unwrap();
 
     // Zero RSS, but max_memory is 0
     assert!(
@@ -436,12 +376,7 @@ async fn worker_with_zero_max_memory_recycles_immediately() {
 
 #[tokio::test]
 async fn pool_with_zero_workers_initializes_empty() {
-    let mut pool = WorkerPool::new(
-        0,
-        PathBuf::from("/tmp/test"),
-        512,
-        1000,
-    );
+    let mut pool = WorkerPool::new(0, PathBuf::from("/tmp/test"), 512, 1000);
 
     let result = pool.initialize().await;
     assert!(result.is_ok(), "Pool with 0 workers must initialize");
@@ -451,33 +386,21 @@ async fn pool_with_zero_workers_initializes_empty() {
 
 #[tokio::test]
 async fn worker_request_timeout_behavior() {
-    let mut worker = Worker::spawn(
-        0,
-        PathBuf::from("/tmp/test"),
-        512,
-    )
-    .await
-    .unwrap();
+    let mut worker = Worker::spawn(0, PathBuf::from("/tmp/test"), 512)
+        .await
+        .unwrap();
 
     // Very short timeout on stub worker
     let result = worker
         .handle_request("GET".into(), "/index.php".into(), 1) // 1ms timeout
         .await;
 
-    assert!(
-        result.is_err(),
-        "Request must fail (stub mode or timeout)",
-    );
+    assert!(result.is_err(), "Request must fail (stub mode or timeout)",);
 }
 
 #[tokio::test]
 async fn pool_recycle_preserves_worker_id() {
-    let mut pool = WorkerPool::new(
-        2,
-        PathBuf::from("/tmp/test"),
-        512,
-        1000,
-    );
+    let mut pool = WorkerPool::new(2, PathBuf::from("/tmp/test"), 512, 1000);
 
     pool.initialize().await.unwrap();
 
@@ -493,23 +416,14 @@ async fn pool_recycle_preserves_worker_id() {
 
 #[tokio::test]
 async fn pool_multiple_recycles_succeed() {
-    let mut pool = WorkerPool::new(
-        3,
-        PathBuf::from("/tmp/test"),
-        512,
-        1000,
-    );
+    let mut pool = WorkerPool::new(3, PathBuf::from("/tmp/test"), 512, 1000);
 
     pool.initialize().await.unwrap();
 
     // Recycle all workers sequentially
     for i in 0..pool.worker_count() {
         let result = pool.recycle_worker(i).await;
-        assert!(
-            result.is_ok(),
-            "Recycle of worker {} must succeed",
-            i,
-        );
+        assert!(result.is_ok(), "Recycle of worker {} must succeed", i,);
     }
 
     assert_eq!(pool.idle_count(), 3, "All recycled workers must be idle");

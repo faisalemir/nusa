@@ -11,26 +11,25 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use axum::{
+    Router,
     body::Body,
     http::{Request, StatusCode},
-    Router,
 };
 use bytes::Bytes;
 use tower::ServiceExt;
 
 use nusa_core::{
-    PhpEngine, PhpResponse, RequestContext,
-    BackpressureGuard, ResourceGuard, TenantRegistry, TaskManager,
-    TenantRateLimiter,
+    BackpressureGuard, PhpEngine, PhpResponse, RequestContext, ResourceGuard, TaskManager,
+    TenantRateLimiter, TenantRegistry,
 };
-use nusa_gateway::{app, health::HealthState};
 use nusa_gateway::circuit_breaker::CircuitBreaker;
-use nusa_gateway::tenant_circuit_breaker::TenantCircuitBreakers;
-use nusa_gateway::websocket::WsManager;
 use nusa_gateway::sse::SseManager;
 use nusa_gateway::static_files::StaticFileHandler;
-use nusa_telemetry::metrics::NusaMetrics;
+use nusa_gateway::tenant_circuit_breaker::TenantCircuitBreakers;
+use nusa_gateway::websocket::WsManager;
+use nusa_gateway::{app, health::HealthState};
 use nusa_plugin_api::PluginRegistry;
+use nusa_telemetry::metrics::NusaMetrics;
 
 // ── Mock Engines ──
 
@@ -45,7 +44,9 @@ impl PhpEngine for MockEngine {
             body: Bytes::from("Mock PHP Response"),
         })
     }
-    fn capabilities(&self) -> &'static [&'static str] { &["mock"] }
+    fn capabilities(&self) -> &'static [&'static str] {
+        &["mock"]
+    }
     async fn shutdown(&self) {}
 }
 
@@ -56,7 +57,9 @@ impl PhpEngine for FailingMockEngine {
     async fn execute(&self, _ctx: RequestContext) -> nusa_core::Result<PhpResponse> {
         Err(nusa_core::EngineError::PhpFatal("Test failure".into()))
     }
-    fn capabilities(&self) -> &'static [&'static str] { &["mock"] }
+    fn capabilities(&self) -> &'static [&'static str] {
+        &["mock"]
+    }
     async fn shutdown(&self) {}
 }
 
@@ -215,10 +218,16 @@ async fn test_circuit_breaker_recovers_after_timeout() {
     assert!(!cb.allow_request(), "Circuit must be open");
 
     tokio::time::sleep(Duration::from_millis(60)).await;
-    assert!(cb.allow_request(), "Circuit must be half-open after timeout");
+    assert!(
+        cb.allow_request(),
+        "Circuit must be half-open after timeout"
+    );
 
     cb.record_success();
-    assert!(cb.allow_request(), "Circuit must be closed after success from half-open");
+    assert!(
+        cb.allow_request(),
+        "Circuit must be closed after success from half-open"
+    );
 }
 
 // ── Backpressure Tests ──
@@ -230,7 +239,10 @@ async fn test_backpressure_rejects_when_full() {
     assert!(permit.is_some(), "First permit must succeed");
 
     let permit2 = guard.try_acquire().await;
-    assert!(permit2.is_none(), "Second permit must fail when at capacity");
+    assert!(
+        permit2.is_none(),
+        "Second permit must fail when at capacity"
+    );
 }
 
 #[tokio::test]
@@ -323,7 +335,9 @@ async fn test_ws_endpoint_returns_not_implemented() {
 #[tokio::test]
 async fn test_task_offload_endpoint_accepts() {
     let app = build_test_app(Arc::new(MockEngine));
-    let body = Body::from(r#"{"HttpRequest":{"method":"GET","url":"http://example.com","headers":{},"body":null}}"#);
+    let body = Body::from(
+        r#"{"HttpRequest":{"method":"GET","url":"http://example.com","headers":{},"body":null}}"#,
+    );
     let request = Request::builder()
         .uri("/api/tasks")
         .method("POST")

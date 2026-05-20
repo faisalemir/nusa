@@ -237,7 +237,10 @@ fn wasm_runtime_create_store_succeeds() {
 fn wasm_runtime_create_store_with_nonexistent_dir() {
     let runtime = WasmRuntime::new(&[], 256).expect("runtime must be created");
     let store = runtime.create_store(&PathBuf::from("/nonexistent/dir"));
-    assert!(store.is_ok(), "create_store must succeed even with nonexistent dir");
+    assert!(
+        store.is_ok(),
+        "create_store must succeed even with nonexistent dir"
+    );
 }
 
 #[test]

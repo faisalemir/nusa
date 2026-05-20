@@ -80,10 +80,7 @@ impl TaskManager {
 
     /// Submit a task for async execution — actually spawns the tokio task.
     /// Works both inside and outside a tokio runtime (m07-concurrency).
-    pub fn submit(
-        &self,
-        task: OffloadTask,
-    ) -> (String, oneshot::Receiver<TaskResult>) {
+    pub fn submit(&self, task: OffloadTask) -> (String, oneshot::Receiver<TaskResult>) {
         let (tx, rx) = oneshot::channel();
         let task_id = uuid::Uuid::new_v4().to_string();
         let completed_store = self.completed.clone();
@@ -138,29 +135,42 @@ impl TaskManager {
 /// Execute an offloaded task with a timeout.
 async fn execute_task(task: OffloadTask) -> TaskResult {
     match task {
-        OffloadTask::HttpRequest { method, url, headers, body } => {
-            tokio::time::timeout(Duration::from_secs(60), execute_http_task(method, url, headers, body)).await
-                .unwrap_or_else(|_| TaskResult {
-                    success: false,
-                    data: vec![],
-                    error: Some("HTTP task timed out (60s)".into()),
-                })
-        }
-        OffloadTask::FileOperation { operation, path, data } => {
-            tokio::time::timeout(Duration::from_secs(30), execute_file_task(operation, path, data)).await
-                .unwrap_or_else(|_| TaskResult {
-                    success: false,
-                    data: vec![],
-                    error: Some("File operation timed out (30s)".into()),
-                })
-        }
-        OffloadTask::Custom { task_type, payload } => {
-            TaskResult {
-                success: false,
-                data: vec![],
-                error: Some(format!("Custom task type '{task_type}' not yet implemented. Payload: {payload}")),
-            }
-        }
+        OffloadTask::HttpRequest {
+            method,
+            url,
+            headers,
+            body,
+        } => tokio::time::timeout(
+            Duration::from_secs(60),
+            execute_http_task(method, url, headers, body),
+        )
+        .await
+        .unwrap_or_else(|_| TaskResult {
+            success: false,
+            data: vec![],
+            error: Some("HTTP task timed out (60s)".into()),
+        }),
+        OffloadTask::FileOperation {
+            operation,
+            path,
+            data,
+        } => tokio::time::timeout(
+            Duration::from_secs(30),
+            execute_file_task(operation, path, data),
+        )
+        .await
+        .unwrap_or_else(|_| TaskResult {
+            success: false,
+            data: vec![],
+            error: Some("File operation timed out (30s)".into()),
+        }),
+        OffloadTask::Custom { task_type, payload } => TaskResult {
+            success: false,
+            data: vec![],
+            error: Some(format!(
+                "Custom task type '{task_type}' not yet implemented. Payload: {payload}"
+            )),
+        },
     }
 }
 
@@ -200,7 +210,9 @@ async fn execute_http_task(
                 Ok(b) => TaskResult {
                     success: status.is_success(),
                     data: b.to_vec(),
-                    error: if status.is_success() { None } else {
+                    error: if status.is_success() {
+                        None
+                    } else {
                         Some(format!("HTTP {}", status))
                     },
                 },
@@ -219,37 +231,32 @@ async fn execute_http_task(
     }
 }
 
-async fn execute_file_task(
-    operation: String,
-    path: String,
-    data: Option<Vec<u8>>,
-) -> TaskResult {
+async fn execute_file_task(operation: String, path: String, data: Option<Vec<u8>>) -> TaskResult {
     match operation.to_lowercase().as_str() {
-        "read" => {
-            match tokio::fs::read(&path).await {
-                Ok(bytes) => TaskResult {
-                    success: true,
-                    data: bytes,
-                    error: None,
-                },
-                Err(e) => TaskResult {
-                    success: false,
-                    data: vec![],
-                    error: Some(format!("Failed to read file: {e}")),
-                },
-            }
-        }
+        "read" => match tokio::fs::read(&path).await {
+            Ok(bytes) => TaskResult {
+                success: true,
+                data: bytes,
+                error: None,
+            },
+            Err(e) => TaskResult {
+                success: false,
+                data: vec![],
+                error: Some(format!("Failed to read file: {e}")),
+            },
+        },
         "write" => {
             if let Some(data_bytes) = data {
                 let path_buf = PathBuf::from(&path);
                 if let Some(parent) = path_buf.parent()
-                    && let Err(e) = tokio::fs::create_dir_all(parent).await {
-                        return TaskResult {
-                            success: false,
-                            data: vec![],
-                            error: Some(format!("Failed to create directory: {e}")),
-                        };
-                    }
+                    && let Err(e) = tokio::fs::create_dir_all(parent).await
+                {
+                    return TaskResult {
+                        success: false,
+                        data: vec![],
+                        error: Some(format!("Failed to create directory: {e}")),
+                    };
+                }
                 match tokio::fs::write(&path, &data_bytes).await {
                     Ok(()) => TaskResult {
                         success: true,
@@ -270,20 +277,18 @@ async fn execute_file_task(
                 }
             }
         }
-        "delete" => {
-            match tokio::fs::remove_file(&path).await {
-                Ok(()) => TaskResult {
-                    success: true,
-                    data: vec![],
-                    error: None,
-                },
-                Err(e) => TaskResult {
-                    success: false,
-                    data: vec![],
-                    error: Some(format!("Failed to delete file: {e}")),
-                },
-            }
-        }
+        "delete" => match tokio::fs::remove_file(&path).await {
+            Ok(()) => TaskResult {
+                success: true,
+                data: vec![],
+                error: None,
+            },
+            Err(e) => TaskResult {
+                success: false,
+                data: vec![],
+                error: Some(format!("Failed to delete file: {e}")),
+            },
+        },
         _ => TaskResult {
             success: false,
             data: vec![],
@@ -299,10 +304,13 @@ fn complete_task(
     task_id: &str,
     result: TaskResult,
 ) {
-    completed.lock().insert(task_id.to_string(), StoredTask {
-        completed: true,
-        result: Some(result.clone()),
-    });
+    completed.lock().insert(
+        task_id.to_string(),
+        StoredTask {
+            completed: true,
+            result: Some(result.clone()),
+        },
+    );
 
     if let Some(tx) = pending.lock().remove(task_id) {
         let _ = tx.send(result);

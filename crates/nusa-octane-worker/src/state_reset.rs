@@ -85,7 +85,8 @@ impl StateResetOrchestrator {
         let _ = self.event_tx.send(event);
 
         // Increment stats
-        self.stats.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.stats
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
         Ok(())
     }

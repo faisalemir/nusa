@@ -12,10 +12,7 @@ use std::time::Duration;
 
 use bytes::Bytes;
 use http::HeaderMap;
-use nusa_core::{
-    EngineError, PhpEngine, PhpResponse, RequestContext,
-    TenantId, TraceId, WorkerId,
-};
+use nusa_core::{EngineError, PhpEngine, PhpResponse, RequestContext, TenantId, TraceId, WorkerId};
 
 // ── TraceId: newtype wrapper (m05-type-driven) ──
 
@@ -124,7 +121,10 @@ fn request_context_with_body() {
 #[test]
 fn request_context_with_headers() {
     let mut headers = HeaderMap::new();
-    headers.insert("content-type", "application/json".parse().expect("valid header value"));
+    headers.insert(
+        "content-type",
+        "application/json".parse().expect("valid header value"),
+    );
 
     let ctx = RequestContext::new(
         "/app/public".into(),
@@ -138,9 +138,10 @@ fn request_context_with_headers() {
 
 #[test]
 fn request_context_with_env() {
-    let env = Arc::new(HashMap::from([
-        ("APP_ENV".to_string(), "testing".to_string()),
-    ]));
+    let env = Arc::new(HashMap::from([(
+        "APP_ENV".to_string(),
+        "testing".to_string(),
+    )]));
 
     let ctx = RequestContext::new(
         "/app/public".into(),

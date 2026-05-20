@@ -5,7 +5,7 @@
 //! - `m05-type-driven`: TenantId enforces type-level scoping
 //! - `m15-anti-pattern`: Path traversal prevention without requiring paths to exist
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use crate::types::TenantId;
 
@@ -15,7 +15,7 @@ pub trait TenantVfs: Send + Sync {
     fn resolve_path(&self, tenant_id: &TenantId, relative: &str) -> Option<PathBuf>;
 
     /// Get the VFS root for a tenant.
-    fn vfs_root(&self, tenant_id: &TenantId) -> Option<&Path>;
+    fn vfs_root(&self, tenant_id: &TenantId) -> Option<PathBuf>;
 }
 
 /// Default VFS implementation: each tenant gets a subdirectory under a base path.
@@ -76,7 +76,11 @@ impl TenantVfs for DefaultTenantVfs {
 
         // Additional check: try canonicalize if path exists, otherwise trust our validation
         if let Ok(canonical) = resolved.canonicalize() {
-            let tenant_root = self.base_path.join(tenant_id.as_str()).canonicalize().ok()?;
+            let tenant_root = self
+                .base_path
+                .join(tenant_id.as_str())
+                .canonicalize()
+                .ok()?;
             if canonical.starts_with(&tenant_root) {
                 Some(canonical)
             } else {
@@ -89,13 +93,8 @@ impl TenantVfs for DefaultTenantVfs {
         }
     }
 
-    fn vfs_root(&self, tenant_id: &TenantId) -> Option<&Path> {
-        // Return None until the tenant directory actually exists
+    fn vfs_root(&self, tenant_id: &TenantId) -> Option<PathBuf> {
         let path = self.base_path.join(tenant_id.as_str());
-        if path.exists() {
-            Some(&self.base_path)
-        } else {
-            None
-        }
+        if path.exists() { Some(path) } else { None }
     }
 }

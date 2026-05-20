@@ -76,6 +76,7 @@ async-trait = "0.1"
 # Blueprint 6: Web Server
 rustls-acme = "0.9"
 quinn = "0.13"
+rustls-pki-types = "1"
 
 # Blueprint 6: Realtime
 tokio-tungstenite = "0.26"

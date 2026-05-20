@@ -4,7 +4,7 @@
 //! - `m10-performance`: Counters, histograms, gauges for observability
 //! - `domain-cloud-native`: Standard Prometheus metric naming
 
-use metrics::{Counter, Histogram, Gauge};
+use metrics::{Counter, Gauge, Histogram};
 
 /// Shared metric handles, initialized once and reused.
 pub struct NusaMetrics {

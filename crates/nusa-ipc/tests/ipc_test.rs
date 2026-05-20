@@ -40,7 +40,11 @@ fn serialize_hello_roundtrip() {
     let decoded = IpcMessage::from_framed_bytes(&framed).expect("Hello must deserialize");
 
     match decoded {
-        IpcMessage::Hello { version, pid, capabilities } => {
+        IpcMessage::Hello {
+            version,
+            pid,
+            capabilities,
+        } => {
             assert_eq!(version, "1.0");
             assert_eq!(pid, 12345);
             assert_eq!(capabilities, vec!["http", "tasks"]);
@@ -71,7 +75,12 @@ fn serialize_request_roundtrip() {
     let decoded = IpcMessage::from_framed_bytes(&framed).expect("Request must deserialize");
 
     match decoded {
-        IpcMessage::Request { method, uri, timeout_ms, .. } => {
+        IpcMessage::Request {
+            method,
+            uri,
+            timeout_ms,
+            ..
+        } => {
             assert_eq!(method, "GET");
             assert_eq!(uri, "/api/users");
             assert_eq!(timeout_ms, 30_000);
@@ -95,7 +104,12 @@ fn serialize_response_roundtrip() {
     let decoded = IpcMessage::from_framed_bytes(&framed).expect("Response must deserialize");
 
     match decoded {
-        IpcMessage::Response { status, body, terminated, .. } => {
+        IpcMessage::Response {
+            status,
+            body,
+            terminated,
+            ..
+        } => {
             assert_eq!(status, 200);
             assert_eq!(body, b"hello world");
             assert!(terminated);
@@ -112,8 +126,11 @@ fn serialize_control_signals() {
         IpcMessage::Shutdown,
         IpcMessage::Recycle,
     ] {
-        let framed = msg.to_framed_bytes().expect("control signal must serialize");
-        let decoded = IpcMessage::from_framed_bytes(&framed).expect("control signal must deserialize");
+        let framed = msg
+            .to_framed_bytes()
+            .expect("control signal must serialize");
+        let decoded =
+            IpcMessage::from_framed_bytes(&framed).expect("control signal must deserialize");
 
         // Type-level check: variant matches original
         assert_eq!(
@@ -147,7 +164,10 @@ fn codec_encode_decode_single_frame() {
     let mut buf = BytesMut::new();
 
     codec.encode(msg, &mut buf).expect("encode must succeed");
-    let decoded = codec.decode(&mut buf).expect("decode must succeed").expect("must produce a message");
+    let decoded = codec
+        .decode(&mut buf)
+        .expect("decode must succeed")
+        .expect("must produce a message");
 
     assert!(matches!(decoded, IpcMessage::Shutdown));
     assert!(buf.is_empty(), "buffer must be fully consumed");
@@ -159,8 +179,12 @@ fn codec_handles_multiple_frames_in_buffer() {
     let mut buf = BytesMut::new();
 
     // Encode two messages
-    codec.encode(IpcMessage::Ping, &mut buf).expect("encode Ping");
-    codec.encode(IpcMessage::Pong, &mut buf).expect("encode Pong");
+    codec
+        .encode(IpcMessage::Ping, &mut buf)
+        .expect("encode Ping");
+    codec
+        .encode(IpcMessage::Pong, &mut buf)
+        .expect("encode Pong");
 
     let first = codec.decode(&mut buf).expect("decode first");
     let second = codec.decode(&mut buf).expect("decode second");
@@ -174,7 +198,9 @@ fn codec_returns_none_for_incomplete_header() {
     let mut codec = IpcCodec::new();
     let mut buf = BytesMut::from(&[0u8; 3][..]); // less than 4 bytes
 
-    let result = codec.decode(&mut buf).expect("decode should not error, just return None");
+    let result = codec
+        .decode(&mut buf)
+        .expect("decode should not error, just return None");
     assert!(result.is_none(), "incomplete header must return None");
 }
 
@@ -207,7 +233,9 @@ fn codec_returns_none_for_incomplete_payload() {
     // Remove last 10 bytes to simulate incomplete payload
     buf.truncate(buf.len() - 10);
 
-    let result = codec.decode(&mut buf).expect("decode should not error on incomplete data");
+    let result = codec
+        .decode(&mut buf)
+        .expect("decode should not error on incomplete data");
     assert!(result.is_none(), "incomplete payload must return None");
 }
 
@@ -231,7 +259,9 @@ fn codec_respects_max_frame_size() {
     };
 
     let mut buf = BytesMut::new();
-    codec.encode(msg, &mut buf).expect("encode must succeed (encoder doesn't validate size)");
+    codec
+        .encode(msg, &mut buf)
+        .expect("encode must succeed (encoder doesn't validate size)");
 
     // Decoder should reject oversized frame
     let result = codec.decode(&mut buf);

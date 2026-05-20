@@ -16,7 +16,7 @@ jobs:
         with:
           components: rustfmt, clippy
       - run: cargo fmt --check
-      - run: cargo clippy -- -D warnings
+      - run: cargo clippy --workspace -- -D warnings
 
   test:
     name: Test Suite
@@ -32,9 +32,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo install cargo-audit cargo-deny syft
+      - run: cargo install cargo-audit cargo-deny cargo-geiger syft
       - run: cargo audit
       - run: cargo deny check
+      - run: cargo geiger
       - run: syft packages dir:. -o spdx-json > sbom.json
       - uses: actions/upload-artifact@v4
         with:

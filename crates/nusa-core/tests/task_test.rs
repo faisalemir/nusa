@@ -127,14 +127,17 @@ fn task_http_request_variant() {
     let task = OffloadTask::HttpRequest {
         method: "POST".into(),
         url: "https://api.example.com/data".into(),
-        headers: HashMap::from([
-            ("Content-Type".into(), "application/json".into()),
-        ]),
+        headers: HashMap::from([("Content-Type".into(), "application/json".into())]),
         body: Some(vec![1, 2, 3]),
     };
 
     match task {
-        OffloadTask::HttpRequest { method, url, headers, body } => {
+        OffloadTask::HttpRequest {
+            method,
+            url,
+            headers,
+            body,
+        } => {
             assert_eq!(method, "POST");
             assert_eq!(url, "https://api.example.com/data");
             assert_eq!(headers.len(), 1);
@@ -170,7 +173,11 @@ fn task_file_operation_variant() {
     };
 
     match task {
-        OffloadTask::FileOperation { operation, path, data } => {
+        OffloadTask::FileOperation {
+            operation,
+            path,
+            data,
+        } => {
             assert_eq!(operation, "read");
             assert_eq!(path, "/data/file.txt");
             assert!(data.is_none());
@@ -208,7 +215,10 @@ fn task_custom_variant() {
     };
 
     match task {
-        OffloadTask::Custom { task_type, payload: p } => {
+        OffloadTask::Custom {
+            task_type,
+            payload: p,
+        } => {
             assert_eq!(task_type, "process_data");
             assert_eq!(p, payload);
         }

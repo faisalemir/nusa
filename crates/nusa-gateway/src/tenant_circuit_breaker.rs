@@ -12,8 +12,8 @@ use std::time::Duration;
 use dashmap::DashMap;
 use tracing::info;
 
+use crate::circuit_breaker::{CbState, CircuitBreaker};
 use nusa_core::TenantId;
-use crate::circuit_breaker::{CircuitBreaker, CbState};
 
 /// Per-tenant circuit breaker registry.
 ///

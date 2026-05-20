@@ -147,7 +147,17 @@ impl IpcMessage {
 
     /// Create a broadcast event message.
     #[must_use]
-    pub fn broadcast_event(channel: String, event: String, data: String, tenants: Vec<String>) -> Self {
-        Self::BroadcastEvent { channel, event, data, tenants }
+    pub fn broadcast_event(
+        channel: String,
+        event: String,
+        data: String,
+        tenants: Vec<String>,
+    ) -> Self {
+        Self::BroadcastEvent {
+            channel,
+            event,
+            data,
+            tenants,
+        }
     }
 }

@@ -4,7 +4,7 @@
 //! Skills applied:
 //! - `m10-performance`: Criterion-based benchmark with warmup and measurement
 
-use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use std::time::{Duration, Instant};
 
 /// Measure cold start time: nusa start → /ready returns READY.
@@ -23,7 +23,8 @@ fn cold_start_benchmark(c: &mut Criterion) {
                 let _config = nusa_config::get();
                 let _metrics = nusa_telemetry::metrics::NusaMetrics::init();
                 let _guard = nusa_core::BackpressureGuard::new(4);
-                let _cb = nusa_gateway::circuit_breaker::CircuitBreaker::new(5, Duration::from_secs(30));
+                let _cb =
+                    nusa_gateway::circuit_breaker::CircuitBreaker::new(5, Duration::from_secs(30));
                 total += start.elapsed();
             }
             total

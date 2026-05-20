@@ -1,5 +1,9 @@
 //! Child process engine and process lifecycle management.
 //!
+//! **Status:** Stub implementation (M1/M2 milestone). Process lifecycle scaffolding exists in
+//! `process.rs` (spawn, kill, Drop) but IPC framing for stdin/stdout communication is not
+//! implemented. The `execute()` and `shutdown()` methods return stub responses.
+//!
 //! Skills applied:
 //! - `m07-concurrency`: tokio::process for async child management
 //! - `m12-lifecycle`: Spawn→communicate→shutdown phases
@@ -8,7 +12,7 @@
 use async_trait::async_trait;
 use tracing::info;
 
-use nusa_core::{PhpEngine, RequestContext, PhpResponse, Result};
+use nusa_core::{PhpEngine, PhpResponse, RequestContext, Result};
 
 // PHP engine running as child processes.
 //
@@ -23,9 +27,7 @@ pub struct ChildEngine {
 
 impl ChildEngine {
     pub fn new(php_binary: std::path::PathBuf) -> Self {
-        Self {
-            php_binary,
-        }
+        Self { php_binary }
     }
 
     pub fn with_default_php() -> Self {
@@ -36,7 +38,6 @@ impl ChildEngine {
 #[async_trait]
 impl PhpEngine for ChildEngine {
     async fn execute(&self, _ctx: RequestContext) -> Result<PhpResponse> {
-
         // TODO: Spawn child process
         // TODO: Send request via stdin (framed IPC)
         // TODO: Read response from stdout
@@ -60,5 +61,4 @@ impl PhpEngine for ChildEngine {
         // TODO: Signal all worker processes to stop
         // TODO: Wait for graceful exit or force-kill after timeout
     }
-
 }

@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use bytes::Bytes;
-use nusa_core::{RequestContext, TenantId, TaskManager, OffloadTask};
+use nusa_core::{OffloadTask, RequestContext, TaskManager, TenantId};
 
 // ── Leak Detection: RequestContext ──
 
@@ -52,7 +52,8 @@ fn request_context_arc_env_no_leak_on_clone() {
         "/app/public".into(),
         "index.php".into(),
         tokio::time::Instant::now() + Duration::from_secs(30),
-    ).with_env(env);
+    )
+    .with_env(env);
 
     // === Act ===
     let mut clones = vec![];
@@ -134,13 +135,15 @@ fn request_context_headers_not_shared() {
         "/app/public".into(),
         "index.php".into(),
         tokio::time::Instant::now() + Duration::from_secs(30),
-    ).with_body(Bytes::from("body1"));
+    )
+    .with_body(Bytes::from("body1"));
 
     let ctx2 = RequestContext::new(
         "/app/public".into(),
         "index.php".into(),
         tokio::time::Instant::now() + Duration::from_secs(30),
-    ).with_body(Bytes::from("body2"));
+    )
+    .with_body(Bytes::from("body2"));
 
     // === Act & Assert ===
     assert_eq!(ctx1.body(), &Bytes::from("body1"));

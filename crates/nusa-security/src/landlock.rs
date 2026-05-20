@@ -14,19 +14,17 @@ use std::path::Path;
 /// - Deny everything else
 #[cfg(target_os = "linux")]
 pub fn apply_landlock_rules(code_dir: &Path, tmp_dir: &Path) -> anyhow::Result<()> {
-    use landlock::{Ruleset, RulesetAttr, RulesetCreatedAttr, PathBeneath, AccessFs};
+    use landlock::{AccessFs, PathBeneath, Ruleset, RulesetAttr, RulesetCreatedAttr};
 
-    tracing::info!(
-        "Applying Landlock: RO={:?}, RW={:?}",
-        code_dir, tmp_dir
-    );
+    tracing::info!("Applying Landlock: RO={:?}, RW={:?}", code_dir, tmp_dir);
 
     let ruleset = Ruleset::new()
         .handle_access(AccessFs::from_file(landlock::Access::READ))?
         .create()?
-        .add_rule(
-            PathBeneath::new(code_dir, AccessFs::READ_FILE | AccessFs::READ_DIR)
-        )?
+        .add_rule(PathBeneath::new(
+            code_dir,
+            AccessFs::READ_FILE | AccessFs::READ_DIR,
+        ))?
         .create()?
         .restrict_self()?;
 

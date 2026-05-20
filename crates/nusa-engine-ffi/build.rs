@@ -19,8 +19,8 @@ fn main() {
         return;
     }
 
-    let php_include = std::env::var("PHP_INCLUDE_DIR")
-        .unwrap_or_else(|_| "/usr/include/php".into());
+    let php_include =
+        std::env::var("PHP_INCLUDE_DIR").unwrap_or_else(|_| "/usr/include/php".into());
 
     let bindings = bindgen::Builder::default()
         .header("wrapper.h")

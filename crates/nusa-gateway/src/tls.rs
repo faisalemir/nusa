@@ -7,9 +7,7 @@
 use std::path::PathBuf;
 
 use rustls::ServerConfig;
-use rustls_pemfile::{certs, private_key};
-use std::fs::File;
-use std::io::BufReader;
+use rustls_pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject};
 
 /// TLS configuration for HTTPS.
 #[derive(Debug, Clone)]
@@ -21,17 +19,12 @@ pub struct TlsConfig {
 impl TlsConfig {
     /// Load TLS certificates and create a rustls ServerConfig.
     pub fn load(&self) -> anyhow::Result<ServerConfig> {
-        // Load certificate
-        let cert_file = File::open(&self.cert_path)?;
-        let mut cert_reader = BufReader::new(cert_file);
-        let certs = certs(&mut cert_reader).collect::<Result<Vec<_>, _>>()?;
+        // Load certificates
+        let certs =
+            CertificateDer::pem_file_iter(&self.cert_path)?.collect::<Result<Vec<_>, _>>()?;
 
         // Load private key
-        let key_file = File::open(&self.key_path)?;
-        let mut key_reader = BufReader::new(key_file);
-        let key = private_key(&mut key_reader)?.ok_or_else(|| {
-            anyhow::anyhow!("No private key found in {}", self.key_path.display())
-        })?;
+        let key = PrivateKeyDer::from_pem_file(&self.key_path)?;
 
         // Create TLS 1.3 server config
         let config = ServerConfig::builder()

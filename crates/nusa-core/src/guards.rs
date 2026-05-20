@@ -8,7 +8,7 @@
 use std::sync::Arc;
 
 use tokio::sync::Semaphore;
-use tokio::time::{timeout, Duration};
+use tokio::time::{Duration, timeout};
 
 use crate::{EngineError, Result};
 
@@ -40,7 +40,7 @@ impl Default for ResourceGuard {
     fn default() -> Self {
         Self {
             max_request_bytes: 10 * 1024 * 1024, // 10MB
-            request_timeout_ms: 30_000,           // 30s
+            request_timeout_ms: 30_000,          // 30s
             max_concurrent: 100,
         }
     }

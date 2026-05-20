@@ -41,7 +41,10 @@ fn task_manager_submit_custom_returns_result() {
     assert!(result.is_ok(), "task submission must not fail");
     let result = result.unwrap();
     assert!(!result.success, "custom tasks are not implemented");
-    assert!(result.error.is_some(), "custom task must include error message");
+    assert!(
+        result.error.is_some(),
+        "custom task must include error message"
+    );
 
     // Verify status shows completed
     let status = manager.status(&id);

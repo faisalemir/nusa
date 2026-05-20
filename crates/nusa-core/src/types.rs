@@ -98,11 +98,7 @@ pub struct RequestContext {
 
 impl RequestContext {
     #[must_use]
-    pub fn new(
-        vfs_root: PathBuf,
-        script_path: PathBuf,
-        deadline: tokio::time::Instant,
-    ) -> Self {
+    pub fn new(vfs_root: PathBuf, script_path: PathBuf, deadline: tokio::time::Instant) -> Self {
         Self {
             trace_id: TraceId::new(),
             tenant_id: None,

@@ -11,20 +11,23 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use axum::{body::Body, http::Request, Router};
+use axum::{Router, body::Body, http::Request};
 use bytes::Bytes;
 use tower::ServiceExt;
 
-use nusa_core::{BackpressureGuard, PhpEngine, PhpResponse, RequestContext, ResourceGuard, TaskManager, TenantRateLimiter, TenantRegistry};
+use nusa_core::{
+    BackpressureGuard, PhpEngine, PhpResponse, RequestContext, ResourceGuard, TaskManager,
+    TenantRateLimiter, TenantRegistry,
+};
+use nusa_gateway::app;
 use nusa_gateway::circuit_breaker::CircuitBreaker;
 use nusa_gateway::health::HealthState;
-use nusa_gateway::tenant_circuit_breaker::TenantCircuitBreakers;
-use nusa_gateway::websocket::WsManager;
 use nusa_gateway::sse::SseManager;
 use nusa_gateway::static_files::StaticFileHandler;
-use nusa_gateway::app;
-use nusa_telemetry::metrics::NusaMetrics;
+use nusa_gateway::tenant_circuit_breaker::TenantCircuitBreakers;
+use nusa_gateway::websocket::WsManager;
 use nusa_plugin_api::PluginRegistry;
+use nusa_telemetry::metrics::NusaMetrics;
 
 struct OkEngine;
 
@@ -37,7 +40,9 @@ impl PhpEngine for OkEngine {
             body: Bytes::from("OK"),
         })
     }
-    fn capabilities(&self) -> &'static [&'static str] { &["mock"] }
+    fn capabilities(&self) -> &'static [&'static str] {
+        &["mock"]
+    }
     async fn shutdown(&self) {}
 }
 
@@ -78,26 +83,58 @@ async fn gateway_all_endpoints_respond() {
 
     // === Act & Assert ===
     // Health endpoint
-    let resp = app.clone().oneshot(
-        Request::builder().uri("/health").method("GET").body(Body::empty()).unwrap()
-    ).await.unwrap();
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/health")
+                .method("GET")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(resp.status(), axum::http::StatusCode::OK);
 
     // Ready endpoint (not yet marked ready)
-    let resp = app.clone().oneshot(
-        Request::builder().uri("/ready").method("GET").body(Body::empty()).unwrap()
-    ).await.unwrap();
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/ready")
+                .method("GET")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(resp.status(), axum::http::StatusCode::SERVICE_UNAVAILABLE);
 
     // Metrics endpoint
-    let resp = app.clone().oneshot(
-        Request::builder().uri("/metrics").method("GET").body(Body::empty()).unwrap()
-    ).await.unwrap();
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/metrics")
+                .method("GET")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(resp.status(), axum::http::StatusCode::OK);
 
     // WS endpoint (stub)
-    let resp = app.clone().oneshot(
-        Request::builder().uri("/ws").method("GET").body(Body::empty()).unwrap()
-    ).await.unwrap();
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/ws")
+                .method("GET")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(resp.status(), axum::http::StatusCode::NOT_IMPLEMENTED);
 }

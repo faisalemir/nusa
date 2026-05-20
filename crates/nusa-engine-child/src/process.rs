@@ -22,10 +22,7 @@ pub struct ChildProcess {
 
 impl ChildProcess {
     // Spawn a new PHP child process.
-    pub async fn spawn(
-        php_binary: &Path,
-        bootstrap_script: &Path,
-    ) -> std::io::Result<Self> {
+    pub async fn spawn(php_binary: &Path, bootstrap_script: &Path) -> std::io::Result<Self> {
         info!(
             "Spawning PHP process: {:?} {:?}",
             php_binary, bootstrap_script
@@ -65,7 +62,10 @@ impl ChildProcess {
 impl Drop for ChildProcess {
     fn drop(&mut self) {
         if self.handle.is_some() {
-            info!("ChildProcess dropped without explicit shutdown (pid: {:?})", self.pid);
+            info!(
+                "ChildProcess dropped without explicit shutdown (pid: {:?})",
+                self.pid
+            );
         }
     }
 }

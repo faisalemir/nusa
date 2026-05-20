@@ -5,7 +5,7 @@
 //! - `m09-domain`: Health state as domain model
 //! - `m07-concurrency`: AtomicU64/AtomicBool for lock-free counters
 
-use std::sync::atomic::{AtomicU64, AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 /// Shared health state for the gateway.
 pub struct HealthState {

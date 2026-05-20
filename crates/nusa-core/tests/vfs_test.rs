@@ -4,7 +4,7 @@
 //! rust-test-deep Phase 2: Security Exhaustive (path traversal)
 //! rust-test-deep §3: Path Exhaustive
 
-use nusa_core::{DefaultTenantVfs, TenantVfs, TenantId};
+use nusa_core::{DefaultTenantVfs, TenantId, TenantVfs};
 use std::path::PathBuf;
 
 // ── Happy Paths ──
@@ -26,7 +26,10 @@ fn vfs_resolve_simple_path() {
 
     // === Assert ===
     assert!(result.is_some(), "simple path must resolve");
-    assert_eq!(result.unwrap(), PathBuf::from("/tmp/nusa-test/acme/index.php"));
+    assert_eq!(
+        result.unwrap(),
+        PathBuf::from("/tmp/nusa-test/acme/index.php")
+    );
 }
 
 /// === Arrange ===
@@ -46,7 +49,10 @@ fn vfs_resolve_nested_path() {
 
     // === Assert ===
     assert!(result.is_some(), "nested path must resolve");
-    assert_eq!(result.unwrap(), PathBuf::from("/tmp/nusa-test/acme/app/Controllers/Home.php"));
+    assert_eq!(
+        result.unwrap(),
+        PathBuf::from("/tmp/nusa-test/acme/app/Controllers/Home.php")
+    );
 }
 
 // ── Security: Path Traversal ──
@@ -111,7 +117,10 @@ fn vfs_blocks_absolute_path_escape() {
     // Absolute paths should be blocked or resolved within tenant scope
     // Since we join, this becomes /tmp/nusa-test/acme/etc/shadow which is fine
     // The test is that it doesn't escape the base
-    assert!(result.is_some() || result.is_none(), "must handle absolute path safely");
+    assert!(
+        result.is_some() || result.is_none(),
+        "must handle absolute path safely"
+    );
 }
 
 /// === Arrange ===

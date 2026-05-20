@@ -45,7 +45,10 @@ fn tenant_cb_opens_after_threshold() {
     cb.record_failure(&tenant);
 
     // === Assert ===
-    assert!(!cb.is_allowed(&tenant), "tenant CB must be open after threshold");
+    assert!(
+        !cb.is_allowed(&tenant),
+        "tenant CB must be open after threshold"
+    );
 }
 
 /// === Arrange ===
@@ -110,7 +113,10 @@ fn tenant_cb_zero_threshold_opens_immediately() {
     cb.record_failure(&tenant);
 
     // === Assert ===
-    assert!(!cb.is_allowed(&tenant), "zero threshold must open immediately");
+    assert!(
+        !cb.is_allowed(&tenant),
+        "zero threshold must open immediately"
+    );
 }
 
 /// === Arrange ===

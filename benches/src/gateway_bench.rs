@@ -2,10 +2,10 @@
 //!
 //! Run: `cargo bench -p nusa-benchmarks --bench gateway_bench`
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use std::time::Duration;
 
-use nusa_core::{validate_request_size, BackpressureGuard, ResourceGuard};
+use nusa_core::{BackpressureGuard, ResourceGuard, validate_request_size};
 use nusa_gateway::circuit_breaker::CircuitBreaker;
 use nusa_gateway::health::HealthState;
 
@@ -71,5 +71,10 @@ fn bench_resource_guards(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_circuit_breaker, bench_health_state, bench_resource_guards);
+criterion_group!(
+    benches,
+    bench_circuit_breaker,
+    bench_health_state,
+    bench_resource_guards
+);
 criterion_main!(benches);

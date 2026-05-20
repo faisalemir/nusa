@@ -83,7 +83,8 @@ impl TlsService {
             Some(TlsCert {
                 cert_pem: vec![],
                 key_pem: vec![],
-                expires_at: std::time::SystemTime::now() + std::time::Duration::from_secs(86400 * 90),
+                expires_at: std::time::SystemTime::now()
+                    + std::time::Duration::from_secs(86400 * 90),
                 domain: domain.to_string(),
             })
         } else {
@@ -98,8 +99,9 @@ impl TlsService {
     }
 
     pub fn get_cert(&self) -> Option<(Vec<u8>, Vec<u8>)> {
-        self.cert_store.read().as_ref().map(|cert| {
-            (cert.cert_pem.clone(), cert.key_pem.clone())
-        })
+        self.cert_store
+            .read()
+            .as_ref()
+            .map(|cert| (cert.cert_pem.clone(), cert.key_pem.clone()))
     }
 }

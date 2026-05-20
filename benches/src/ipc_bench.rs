@@ -2,7 +2,7 @@
 //!
 //! Run: cargo bench -p nusa-benchmarks --bench ipc_bench
 
-use criterion::{criterion_group, criterion_main, Criterion, black_box};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use std::time::Duration;
 
 use nusa_ipc::{IpcMessage, RequestId};
@@ -72,13 +72,9 @@ fn bench_ipc_deserialization(c: &mut Criterion) {
 fn bench_request_id(c: &mut Criterion) {
     let mut group = c.benchmark_group("request_id");
 
-    group.bench_function("new", |b| {
-        b.iter(|| black_box(RequestId::new()))
-    });
+    group.bench_function("new", |b| b.iter(|| black_box(RequestId::new())));
 
-    group.bench_function("default", |b| {
-        b.iter(|| black_box(RequestId::default()))
-    });
+    group.bench_function("default", |b| b.iter(|| black_box(RequestId::default())));
 
     group.finish();
 }

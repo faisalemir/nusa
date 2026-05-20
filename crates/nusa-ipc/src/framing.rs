@@ -62,7 +62,10 @@ impl Decoder for IpcCodec {
 
         let payload_bytes = src.split_to(total_needed).freeze().slice(4..total_needed);
         let msg = serde_json::from_slice(&payload_bytes).map_err(|e| {
-            std::io::Error::new(std::io::ErrorKind::InvalidData, format!("JSON parse error: {e}"))
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("JSON parse error: {e}"),
+            )
         })?;
 
         Ok(Some(msg))
@@ -74,7 +77,10 @@ impl Encoder<IpcMessage> for IpcCodec {
 
     fn encode(&mut self, item: IpcMessage, dst: &mut BytesMut) -> Result<(), Self::Error> {
         let framed = item.to_framed_bytes().map_err(|e| {
-            std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Serialize error: {e}"))
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Serialize error: {e}"),
+            )
         })?;
         dst.extend_from_slice(&framed);
         Ok(())

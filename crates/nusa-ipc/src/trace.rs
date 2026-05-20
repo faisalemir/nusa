@@ -21,9 +21,7 @@ impl TraceContext {
             .and_then(|v| v.first().cloned())
             .unwrap_or_default();
 
-        let tracestate = headers
-            .get("tracestate")
-            .and_then(|v| v.first().cloned());
+        let tracestate = headers.get("tracestate").and_then(|v| v.first().cloned());
 
         Self {
             traceparent,

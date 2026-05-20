@@ -74,9 +74,8 @@ impl IpcTransport {
             frame_data.extend_from_slice(&header);
             frame_data.extend_from_slice(&payload);
 
-            IpcMessage::from_framed_bytes(&frame_data).map_err(|e| {
-                anyhow::anyhow!("Failed to decode IPC message: {}", e)
-            })
+            IpcMessage::from_framed_bytes(&frame_data)
+                .map_err(|e| anyhow::anyhow!("Failed to decode IPC message: {}", e))
         }
         #[cfg(not(unix))]
         {
@@ -111,11 +110,9 @@ impl IpcTransport {
         };
 
         self.send(request).await?;
-        let response = tokio::time::timeout(
-            std::time::Duration::from_millis(timeout_ms),
-            self.recv(),
-        )
-        .await??;
+        let response =
+            tokio::time::timeout(std::time::Duration::from_millis(timeout_ms), self.recv())
+                .await??;
 
         Ok(response)
     }
@@ -134,10 +131,7 @@ impl IpcTransport {
             self.send(IpcMessage::Ping).await?;
 
             // Try to read a pong within 5 seconds
-            match tokio::time::timeout(
-                std::time::Duration::from_secs(5),
-                self.recv(),
-            ).await {
+            match tokio::time::timeout(std::time::Duration::from_secs(5), self.recv()).await {
                 Ok(Ok(IpcMessage::Pong)) => {
                     *missed_heartbeats = 0;
                 }

@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 use std::time::Duration;
 
-use nusa_core::{TaskManager, OffloadTask, TenantRateLimiter, TenantId};
+use nusa_core::{OffloadTask, TaskManager, TenantId, TenantRateLimiter};
 
 // ── Data Race Tests ──
 
@@ -93,7 +93,11 @@ fn rate_limiter_check_then_act_no_race() {
     let a = allowed.load(Ordering::SeqCst);
     // Due to race conditions in check-then-act, we might get slightly more than burst
     // This tests that the limiter is approximately correct
-    assert!(a <= 60, "allowed {} but expected <= 60 (burst 50 + race tolerance)", a);
+    assert!(
+        a <= 60,
+        "allowed {} but expected <= 60 (burst 50 + race tolerance)",
+        a
+    );
 }
 
 // ── Task Cancellation Tests ──
@@ -122,7 +126,10 @@ fn task_manager_receiver_dropped_no_panic() {
     // === Assert ===
     // Status should still show completed
     let status = mgr.status(&id);
-    assert!(status.completed, "task should complete even if receiver dropped");
+    assert!(
+        status.completed,
+        "task should complete even if receiver dropped"
+    );
 }
 
 /// === Arrange ===

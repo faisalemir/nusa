@@ -32,7 +32,10 @@ impl WorkerMetrics {
             self.error_count.fetch_add(1, Ordering::Relaxed);
         }
         // Update running average
-        let total = self.total_response_time_ms.fetch_add(duration_ms, Ordering::Relaxed) + duration_ms;
+        let total = self
+            .total_response_time_ms
+            .fetch_add(duration_ms, Ordering::Relaxed)
+            + duration_ms;
         let count = self.requests_handled.load(Ordering::Relaxed);
         if let Some(avg) = total.checked_div(count) {
             self.avg_response_time_ms.store(avg, Ordering::Relaxed);

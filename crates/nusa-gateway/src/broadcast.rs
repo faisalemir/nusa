@@ -54,7 +54,9 @@ impl BroadcastBridge {
         _sse_manager: &crate::sse::SseManager,
     ) -> anyhow::Result<()> {
         if let Some(_client) = self.client {
-            info!("Redis broadcast bridge connected (listener stub — full pub/sub requires redis-cli compatible server)");
+            info!(
+                "Redis broadcast bridge connected (listener stub — full pub/sub requires redis-cli compatible server)"
+            );
             // In production: implement full redis pub/sub loop
         } else {
             warn!("Broadcast bridge is in stub mode (no Redis connection)");

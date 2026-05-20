@@ -96,15 +96,16 @@ impl TelemetryExport {
         let stats = stats.lock();
         let now = chrono::Utc::now().to_rfc3339();
 
-        stats.iter().map(|(tenant_id, metric)| {
-            BillingExport {
+        stats
+            .iter()
+            .map(|(tenant_id, metric)| BillingExport {
                 tenant_id: tenant_id.clone(),
                 requests: metric.requests,
                 cpu_ms: metric.cpu_ms,
                 memory_mb: metric.memory_mb,
                 bandwidth_bytes: metric.bandwidth_bytes,
                 timestamp: now.clone(),
-            }
-        }).collect()
+            })
+            .collect()
     }
 }

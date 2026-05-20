@@ -14,7 +14,7 @@
 //! - `m12-lifecycle`: init → execute → shutdown phases
 
 use async_trait::async_trait;
-use nusa_core::{PhpEngine, RequestContext, PhpResponse, EngineError, Result};
+use nusa_core::{EngineError, PhpEngine, PhpResponse, RequestContext, Result};
 use std::panic::AssertUnwindSafe;
 use tokio::task::spawn_blocking;
 use tracing::info;
@@ -63,8 +63,8 @@ mod ffi_impl {
 mod ffi_impl {
     include!(concat!(env!("OUT_DIR"), "/php_sys.rs"));
 
-    use nusa_core::{PhpResponse, EngineError, RequestContext};
     use crate::OUTPUT_BUF;
+    use nusa_core::{EngineError, PhpResponse, RequestContext};
 
     /// Custom ub_write callback — captures PHP output to thread-local buffer.
     ///
@@ -106,9 +106,9 @@ mod ffi_impl {
             php_embed_init(0, std::ptr::null_mut());
 
             // Prepare script path
-            let script_path = std::ffi::CString::new(
-                ctx.script_path().to_string_lossy().as_bytes()
-            ).map_err(|_| EngineError::PhpFatal("invalid script path".into()))?;
+            let script_path =
+                std::ffi::CString::new(ctx.script_path().to_string_lossy().as_bytes())
+                    .map_err(|_| EngineError::PhpFatal("invalid script path".into()))?;
 
             // Create file handle
             let mut fh: zend_file_handle = std::mem::zeroed();
@@ -139,7 +139,11 @@ mod ffi_impl {
 impl PhpEngine for FfiEngine {
     async fn execute(&self, ctx: RequestContext) -> Result<PhpResponse> {
         // m07-concurrency: CPU-bound FFI off the async executor
-        let _permit = self.pool.acquire().await.map_err(|_| EngineError::ResourceLimit)?;
+        let _permit = self
+            .pool
+            .acquire()
+            .await
+            .map_err(|_| EngineError::ResourceLimit)?;
 
         let result = spawn_blocking({
             move || {
@@ -148,10 +152,7 @@ impl PhpEngine for FfiEngine {
                     // SAFETY: Isolated thread with ZTS.
                     // All PHP globals are thread-local in ZTS mode.
                     // This is the ONLY place unsafe FFI calls are made.
-                    ffi_impl::run_sync(
-                        &ctx,
-                        &mut OUTPUT_BUF.with(|b| b.borrow_mut().clone()),
-                    )
+                    ffi_impl::run_sync(&ctx, &mut OUTPUT_BUF.with(|b| b.borrow_mut().clone()))
                 }))
                 .map_err(|_| {
                     // m06-error-handling: panic/segfault caught -> PhpFatal

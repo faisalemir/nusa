@@ -7,6 +7,7 @@
 
 #![deny(unsafe_code)]
 #![warn(clippy::all)]
+#![allow(missing_docs)]
 
 pub mod dev;
 pub mod test;
@@ -14,7 +15,10 @@ pub mod test;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "nusa", about = "Nusa PHP Runtime — Rust-orchestrated PHP runtime for Laravel")]
+#[command(
+    name = "nusa",
+    about = "Nusa PHP Runtime — Rust-orchestrated PHP runtime for Laravel"
+)]
 pub struct Cli {
     /// Path to config file (nusa.toml)
     #[arg(short, long, default_value = "nusa.toml")]

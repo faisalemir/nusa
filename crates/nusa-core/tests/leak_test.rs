@@ -27,7 +27,8 @@ fn test_request_context_no_trace_leak() {
     );
 
     assert_ne!(
-        ctx1.trace_id(), ctx2.trace_id(),
+        ctx1.trace_id(),
+        ctx2.trace_id(),
         "TraceIds must be unique per request"
     );
 }
@@ -39,7 +40,10 @@ fn test_request_context_no_tenant_leak() {
         "index.php".into(),
         tokio::time::Instant::now() + Duration::from_secs(30),
     );
-    assert!(ctx_base.tenant_id().is_none(), "Base ctx must not have tenant");
+    assert!(
+        ctx_base.tenant_id().is_none(),
+        "Base ctx must not have tenant"
+    );
 
     let tenant = TenantId::new("tenant-abc");
     let ctx2 = ctx_base.with_tenant(tenant.clone());
@@ -49,12 +53,16 @@ fn test_request_context_no_tenant_leak() {
 #[test]
 fn test_request_context_no_header_leak() {
     let mut headers1 = HeaderMap::new();
-    headers1.insert(http::header::AUTHORIZATION, "Bearer secret1".parse().unwrap());
+    headers1.insert(
+        http::header::AUTHORIZATION,
+        "Bearer secret1".parse().unwrap(),
+    );
     let _ctx1 = RequestContext::new(
         "/app/public".into(),
         "index.php".into(),
         tokio::time::Instant::now() + Duration::from_secs(30),
-    ).with_headers(headers1);
+    )
+    .with_headers(headers1);
 
     let ctx2 = RequestContext::new(
         "/app/public".into(),
@@ -74,7 +82,8 @@ fn test_request_context_no_body_leak() {
         "/app/public".into(),
         "index.php".into(),
         tokio::time::Instant::now() + Duration::from_secs(30),
-    ).with_body(Bytes::from(vec![0u8; 1024]));
+    )
+    .with_body(Bytes::from(vec![0u8; 1024]));
 
     let ctx2 = RequestContext::new(
         "/app/public".into(),
@@ -82,20 +91,20 @@ fn test_request_context_no_body_leak() {
         tokio::time::Instant::now() + Duration::from_secs(30),
     );
 
-    assert!(
-        ctx2.body().is_empty(),
-        "New context must have empty body"
-    );
+    assert!(ctx2.body().is_empty(), "New context must have empty body");
 }
 
 #[test]
 fn test_request_context_no_env_leak() {
-    let env1: HashMap<String, String> = [("SECRET_KEY".into(), "value1".into())].into_iter().collect();
+    let env1: HashMap<String, String> = [("SECRET_KEY".into(), "value1".into())]
+        .into_iter()
+        .collect();
     let _ctx1 = RequestContext::new(
         "/app/public".into(),
         "index.php".into(),
         tokio::time::Instant::now() + Duration::from_secs(30),
-    ).with_env(Arc::new(env1));
+    )
+    .with_env(Arc::new(env1));
 
     let ctx2 = RequestContext::new(
         "/app/public".into(),
@@ -103,10 +112,7 @@ fn test_request_context_no_env_leak() {
         tokio::time::Instant::now() + Duration::from_secs(30),
     );
 
-    assert!(
-        ctx2.env().is_empty(),
-        "New context must have empty env map"
-    );
+    assert!(ctx2.env().is_empty(), "New context must have empty env map");
 }
 
 /// Simulate 10k sequential request creations and verify no shared state.
@@ -137,10 +143,18 @@ fn test_clone_isolation() {
         "/app/public".into(),
         "index.php".into(),
         tokio::time::Instant::now() + Duration::from_secs(30),
-    ).with_tenant(TenantId::new("original"));
+    )
+    .with_tenant(TenantId::new("original"));
 
     let ctx2 = ctx1.clone();
 
-    assert_eq!(ctx1.trace_id(), ctx2.trace_id(), "Clone shares trace_id (expected)");
-    assert_eq!(ctx1.tenant_id().unwrap().as_str(), ctx2.tenant_id().unwrap().as_str());
+    assert_eq!(
+        ctx1.trace_id(),
+        ctx2.trace_id(),
+        "Clone shares trace_id (expected)"
+    );
+    assert_eq!(
+        ctx1.tenant_id().unwrap().as_str(),
+        ctx2.tenant_id().unwrap().as_str()
+    );
 }

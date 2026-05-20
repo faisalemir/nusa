@@ -42,12 +42,15 @@ impl TestRunner {
 
     /// Initialize the test pool (m12-lifecycle).
     pub async fn initialize(&mut self) -> anyhow::Result<()> {
-        info!("Initializing test pool with {} workers", self.config.workers);
+        info!(
+            "Initializing test pool with {} workers",
+            self.config.workers
+        );
 
         let mut pool = WorkerPool::new(
             self.config.workers as usize,
             self.config.test_path.clone(),
-            256, // 256MB memory per test worker
+            256,  // 256MB memory per test worker
             1000, // recycle after 1000 tests
         );
 
@@ -91,11 +94,13 @@ impl TestRunner {
     /// Reset state between test runs (m12-lifecycle).
     pub fn reset_state(&self) {
         if self.config.reset_between_tests {
-            self.orchestrator.emit_event(
-                nusa_octane_worker::state_reset::OctaneEvent::RequestReceived {
-                    request_id: "test-reset".to_string(),
-                }
-            ).ok();
+            self.orchestrator
+                .emit_event(
+                    nusa_octane_worker::state_reset::OctaneEvent::RequestReceived {
+                        request_id: "test-reset".to_string(),
+                    },
+                )
+                .ok();
         }
     }
 
@@ -119,6 +124,10 @@ pub struct TestResult {
 
 impl std::fmt::Display for TestResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Tests: {} total, {} passed, {} failed", self.total, self.passed, self.failed)
+        write!(
+            f,
+            "Tests: {} total, {} passed, {} failed",
+            self.total, self.passed, self.failed
+        )
     }
 }

@@ -1,10 +1,15 @@
 //! WASM sandbox engine with memory/fuel limits.
 //!
+//! **Status:** Stub implementation (M3 milestone). Runtime infrastructure exists in `runtime.rs`
+//! but is not yet wired into `execute()`. The `runtime.rs` module provides `WasmRuntime` for
+//! wasmtime engine creation with `consume_fuel(true)` and `WasmLimits` implementing
+//! `wasmtime::ResourceLimiter` for memory/table caps.
+//!
 //! Skills applied:
 //! - `m03-mutability`: StoreLimits provides interior mutability for resource caps
 //! - `m06-error-handling`: WASM traps become EngineError::Sandbox, never crash host
 
-use nusa_core::{PhpEngine, RequestContext, PhpResponse, Result};
+use nusa_core::{PhpEngine, PhpResponse, RequestContext, Result};
 
 /// PHP engine running inside a WASM sandbox (wasmtime).
 ///

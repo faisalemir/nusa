@@ -42,11 +42,7 @@ impl Worker {
     ///
     /// On non-Unix platforms, creates a stub worker.
     #[cfg(unix)]
-    pub async fn spawn(
-        id: usize,
-        app_root: PathBuf,
-        _max_memory_mb: u64,
-    ) -> anyhow::Result<Self> {
+    pub async fn spawn(id: usize, app_root: PathBuf, _max_memory_mb: u64) -> anyhow::Result<Self> {
         let socket_dir = app_root.join(".octane");
         tokio::fs::create_dir_all(&socket_dir).await?;
         let socket_path = socket_dir.join(format!("worker-{}.sock", id));
@@ -54,7 +50,8 @@ impl Worker {
         // Spawn PHP worker process
         let mut child = Command::new("php")
             .args([
-                app_root.join("php-driver/bin/octane-rust-worker")
+                app_root
+                    .join("php-driver/bin/octane-rust-worker")
                     .to_string_lossy()
                     .as_ref(),
                 socket_path.to_string_lossy().as_ref(),
@@ -72,8 +69,7 @@ impl Worker {
         }
 
         // Connect via IPC
-        let transport = IpcTransport::connect(socket_path.to_string_lossy().as_ref())
-            .await?;
+        let transport = IpcTransport::connect(socket_path.to_string_lossy().as_ref()).await?;
 
         // Send Hello handshake
         let hello = IpcMessage::Hello {
@@ -100,12 +96,11 @@ impl Worker {
     }
 
     #[cfg(not(unix))]
-    pub async fn spawn(
-        id: usize,
-        _app_root: PathBuf,
-        _max_memory_mb: u64,
-    ) -> anyhow::Result<Self> {
-        warn!("Worker {} stub — UnixSocket not available on this platform", id);
+    pub async fn spawn(id: usize, _app_root: PathBuf, _max_memory_mb: u64) -> anyhow::Result<Self> {
+        warn!(
+            "Worker {} stub — UnixSocket not available on this platform",
+            id
+        );
         Ok(Self {
             id,
             pid: None,
@@ -126,7 +121,9 @@ impl Worker {
     ) -> anyhow::Result<IpcMessage> {
         if let Some(ref mut transport) = self.transport {
             self.state = WorkerState::Busy;
-            let result = transport.request_response(method, uri, Default::default(), timeout_ms).await;
+            let result = transport
+                .request_response(method, uri, Default::default(), timeout_ms)
+                .await;
             if result.is_ok() {
                 self.requests_handled.fetch_add(1, Ordering::SeqCst);
             } else {
@@ -197,12 +194,7 @@ impl WorkerPool {
         info!("Initializing worker pool with {} workers", self.max_workers);
 
         for i in 0..self.max_workers {
-            let worker = Worker::spawn(
-                i,
-                self.app_root.clone(),
-                self.max_memory_mb,
-            )
-            .await?;
+            let worker = Worker::spawn(i, self.app_root.clone(), self.max_memory_mb).await?;
             self.idle_queue.push(i);
             self.workers.push(worker);
         }
@@ -235,12 +227,8 @@ impl WorkerPool {
         self.workers[worker_id].state = WorkerState::Draining;
         self.workers[worker_id].stop().await?;
 
-        let new_worker = Worker::spawn(
-            worker_id,
-            self.app_root.clone(),
-            self.max_memory_mb,
-        )
-        .await?;
+        let new_worker =
+            Worker::spawn(worker_id, self.app_root.clone(), self.max_memory_mb).await?;
         self.workers[worker_id] = new_worker;
         self.idle_queue.push(worker_id);
 

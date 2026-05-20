@@ -9,8 +9,8 @@
 
 use std::sync::Arc;
 
-use axum::Router;
 use arc_swap::ArcSwap;
+use axum::Router;
 use tracing::info;
 
 /// Deployment slot (Blue or Green).
@@ -78,7 +78,8 @@ impl BlueGreenDeployer {
             let old_active = self.active.swap(Arc::new(new_active));
             info!(
                 "Switched deployment: {} -> {}",
-                old_active.name, self.active.load().name
+                old_active.name,
+                self.active.load().name
             );
         }
     }

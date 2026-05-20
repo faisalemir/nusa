@@ -8,6 +8,7 @@
 
 #![deny(unsafe_code)]
 #![warn(clippy::all)]
+#![allow(missing_docs)]
 
 pub mod engine;
 pub mod process;

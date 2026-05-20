@@ -135,10 +135,10 @@ async fn config_hot_reload_false_exits_immediately() {
         hot_reload = false
     "#;
     let path = write_temp_config(content);
-    
+
     // Load the config first so get() returns hot_reload = false
     let _ = nusa_config::load(&path);
-    
+
     let handle = nusa_config::watch(path.clone());
 
     // With hot_reload = false, the task should exit immediately

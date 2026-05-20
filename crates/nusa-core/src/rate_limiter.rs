@@ -15,7 +15,7 @@ use crate::types::TenantId;
 struct Bucket {
     tokens: f64,
     max_tokens: f64,
-    refill_rate: f64,      // tokens per second
+    refill_rate: f64, // tokens per second
     last_refill: Instant,
 }
 

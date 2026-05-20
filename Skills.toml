@@ -50,4 +50,5 @@ ci:
   - cargo clippy --workspace -- -D warnings
   - cargo test --workspace
   - cargo audit
-  - cargo deny
+  - cargo deny check
+  - cargo geiger

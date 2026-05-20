@@ -32,7 +32,7 @@ redis.workspace = true
 futures.workspace = true
 async-stream.workspace = true
 rustls = "0.23"
-rustls-pemfile = "2"
+rustls-pki-types.workspace = true
 anyhow.workspace = true
 
 [dev-dependencies]

@@ -18,7 +18,11 @@ use std::path::PathBuf;
 #[test]
 fn static_is_static_known_extensions() {
     for ext in &[".css", ".js", ".png", ".jpg", ".svg", ".woff2", ".ico"] {
-        assert!(StaticFileHandler::is_static(ext), "{} must be recognized as static", ext);
+        assert!(
+            StaticFileHandler::is_static(ext),
+            "{} must be recognized as static",
+            ext
+        );
     }
 }
 
@@ -31,7 +35,11 @@ fn static_is_static_known_extensions() {
 #[test]
 fn static_is_not_dynamic_extensions() {
     for ext in &[".php", ".html", ".json", ".xml", ".py", ".rb"] {
-        assert!(!StaticFileHandler::is_static(ext), "{} must NOT be recognized as static", ext);
+        assert!(
+            !StaticFileHandler::is_static(ext),
+            "{} must NOT be recognized as static",
+            ext
+        );
     }
 }
 
@@ -114,12 +122,15 @@ fn static_case_sensitive_extension() {
 #[test]
 fn static_all_supported_extensions_recognized() {
     let supported = [
-        ".css", ".js", ".png", ".jpg", ".jpeg", ".gif", ".svg",
-        ".woff", ".woff2", ".ttf", ".eot", ".ico", ".webp",
-        ".mp4", ".webm", ".mp3", ".ogg", ".pdf",
+        ".css", ".js", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".woff", ".woff2", ".ttf", ".eot",
+        ".ico", ".webp", ".mp4", ".webm", ".mp3", ".ogg", ".pdf",
     ];
     for ext in &supported {
-        assert!(StaticFileHandler::is_static(ext), "{} must be supported", ext);
+        assert!(
+            StaticFileHandler::is_static(ext),
+            "{} must be supported",
+            ext
+        );
     }
 }
 
@@ -137,9 +148,7 @@ fn static_very_long_path_handled() {
     let long_path = "/".repeat(10000) + "file.css";
 
     // === Act ===
-    let result = std::panic::catch_unwind(|| {
-        StaticFileHandler::is_static(&long_path)
-    });
+    let result = std::panic::catch_unwind(|| StaticFileHandler::is_static(&long_path));
 
     // === Assert ===
     assert!(result.is_ok(), "very long path must not panic");

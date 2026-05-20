@@ -25,7 +25,10 @@ fn circuit_breaker_opens_after_threshold_reached() {
     // Record failures up to threshold - 1
     cb.record_failure();
     cb.record_failure();
-    assert!(cb.allow_request(), "must still allow requests below threshold");
+    assert!(
+        cb.allow_request(),
+        "must still allow requests below threshold"
+    );
 
     // Record the final failure that trips the breaker
     cb.record_failure();
@@ -53,10 +56,16 @@ fn circuit_breaker_transitions_to_half_open_after_timeout() {
     let cb = CircuitBreaker::new(1, Duration::from_millis(50));
 
     cb.record_failure();
-    assert!(!cb.allow_request(), "must be open immediately after failure");
+    assert!(
+        !cb.allow_request(),
+        "must be open immediately after failure"
+    );
 
     std::thread::sleep(Duration::from_millis(60));
-    assert!(cb.allow_request(), "must transition to half-open after timeout");
+    assert!(
+        cb.allow_request(),
+        "must transition to half-open after timeout"
+    );
 }
 
 #[test]
@@ -79,7 +88,10 @@ fn circuit_breaker_closes_on_success_from_half_open() {
     cb.allow_request(); // transitions to half-open
     cb.record_success(); // should close
 
-    assert!(cb.allow_request(), "must be closed after success from half-open");
+    assert!(
+        cb.allow_request(),
+        "must be closed after success from half-open"
+    );
 }
 
 #[test]
@@ -91,7 +103,10 @@ fn circuit_breaker_failure_from_half_open_reopens() {
     cb.allow_request(); // transitions to half-open
     cb.record_failure(); // should reopen
 
-    assert!(!cb.allow_request(), "must reopen after failure from half-open");
+    assert!(
+        !cb.allow_request(),
+        "must reopen after failure from half-open"
+    );
 }
 
 // ── Failure Count Reset ──

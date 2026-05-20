@@ -8,16 +8,20 @@
 
 use std::path::Path;
 
-use notify::{Event, RecommendedWatcher, Watcher, RecursiveMode};
+use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 use tracing::info;
 
 /// Watched directory patterns for development.
-const WATCH_PATTERNS: &[&str] = &[
-    "app", "config", "routes", "resources/views", ".env",
-];
+const WATCH_PATTERNS: &[&str] = &["app", "config", "routes", "resources/views", ".env"];
 
 /// Ignored directories (never watch these).
-const IGNORE_DIRS: &[&str] = &["vendor", "node_modules", ".git", "storage", "bootstrap/cache"];
+const IGNORE_DIRS: &[&str] = &[
+    "vendor",
+    "node_modules",
+    ".git",
+    "storage",
+    "bootstrap/cache",
+];
 
 /// File watcher for hot-reload in development mode.
 ///

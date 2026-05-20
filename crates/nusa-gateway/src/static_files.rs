@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use axum::{
     body::Body,
     extract::Request,
-    http::{header, StatusCode},
+    http::{StatusCode, header},
     response::Response,
 };
 use moka::future::Cache;
@@ -48,9 +48,8 @@ impl StaticFileHandler {
     /// Check if the path is a static file extension (domain-web).
     pub fn is_static(path: &str) -> bool {
         let extensions = [
-            ".css", ".js", ".png", ".jpg", ".jpeg", ".gif", ".svg",
-            ".woff", ".woff2", ".ttf", ".eot", ".ico", ".webp",
-            ".mp4", ".webm", ".mp3", ".ogg", ".pdf",
+            ".css", ".js", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".woff", ".woff2", ".ttf",
+            ".eot", ".ico", ".webp", ".mp4", ".webm", ".mp3", ".ogg", ".pdf",
         ];
         extensions.iter().any(|ext| path.ends_with(ext))
     }
@@ -144,9 +143,7 @@ impl StaticFileHandler {
     /// Cache-Control strategy: immutable for hash-named files (domain-web).
     fn cache_control(path: &Path) -> String {
         // Hash-named files (e.g. app.abc123.css) get immutable cache
-        let stem = path.file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("");
+        let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
 
         if stem.contains('.') {
             // Contains hash pattern → long TTL with immutable

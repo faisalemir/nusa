@@ -30,7 +30,9 @@ pub fn apply_seccomp_filter() -> anyhow::Result<()> {
     //
     // ctx.load()?;
 
-    tracing::info!("Seccomp-BPF: syscall filter would be applied on Linux with libseccomp installed");
+    tracing::info!(
+        "Seccomp-BPF: syscall filter would be applied on Linux with libseccomp installed"
+    );
     Ok(())
 }
 

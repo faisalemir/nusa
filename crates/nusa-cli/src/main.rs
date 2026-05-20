@@ -14,15 +14,17 @@ use std::sync::Arc;
 
 use nusa_cli::{Cli, Commands};
 use nusa_config::EngineKind;
-use nusa_plugin_api::PluginRegistry;
-use nusa_core::{PhpEngine, BackpressureGuard, ResourceGuard, TenantRegistry, TaskManager, TenantRateLimiter};
+use nusa_core::{
+    BackpressureGuard, PhpEngine, ResourceGuard, TaskManager, TenantRateLimiter, TenantRegistry,
+};
+use nusa_gateway::bluegreen::BlueGreenDeployer;
 use nusa_gateway::circuit_breaker::CircuitBreaker;
 use nusa_gateway::health::HealthState;
-use nusa_gateway::tenant_circuit_breaker::TenantCircuitBreakers;
-use nusa_gateway::websocket::WsManager;
 use nusa_gateway::sse::SseManager;
 use nusa_gateway::static_files::StaticFileHandler;
-use nusa_gateway::bluegreen::BlueGreenDeployer;
+use nusa_gateway::tenant_circuit_breaker::TenantCircuitBreakers;
+use nusa_gateway::websocket::WsManager;
+use nusa_plugin_api::PluginRegistry;
 use nusa_telemetry::metrics::NusaMetrics;
 use std::time::Duration;
 
@@ -47,7 +49,11 @@ async fn handle_subcommand(cmd: Commands) -> anyhow::Result<()> {
     nusa_telemetry::init()?;
 
     match cmd {
-        Commands::Dev { watch, debounce, pretty } => {
+        Commands::Dev {
+            watch,
+            debounce,
+            pretty,
+        } => {
             // F4: nusa dev — hot-reload development mode
             tracing::info!("🔥 Nusa dev mode — watching directories: {}", watch);
             let app_root = std::env::current_dir()?;
@@ -57,7 +63,11 @@ async fn handle_subcommand(cmd: Commands) -> anyhow::Result<()> {
             // Also start the server
             start_server(&cli_config_path()).await
         }
-        Commands::Test { path, workers, reset } => {
+        Commands::Test {
+            path,
+            workers,
+            reset,
+        } => {
             // F5: nusa test — persistent test runner
             tracing::info!("Running tests from {} with {} workers", path, workers);
             let mut runner = nusa_cli::test::TestRunner::new(nusa_cli::test::TestConfig {
@@ -72,7 +82,11 @@ async fn handle_subcommand(cmd: Commands) -> anyhow::Result<()> {
         }
         Commands::Deploy { strategy, config } => {
             // F6: nusa deploy — blue-green deployment
-            tracing::info!("Deploying with strategy: {} (config: {:?})", strategy, config);
+            tracing::info!(
+                "Deploying with strategy: {} (config: {:?})",
+                strategy,
+                config
+            );
             let config_path = config.unwrap_or_else(cli_config_path);
             start_server(&config_path).await
         }
@@ -98,19 +112,12 @@ async fn start_server(config_path: &str) -> anyhow::Result<()> {
     // 3. Initialize Engine based on config (m04-zero-cost: dyn dispatch)
     let engine: Arc<dyn PhpEngine> = match cfg.engine {
         EngineKind::Ffi => Arc::new(nusa_engine_ffi::FfiEngine::new(cfg.max_workers)),
-        EngineKind::Wasm => {
-            Arc::new(nusa_engine_wasm::WasmEngine::stub())
-        }
-        EngineKind::Child => {
-            Arc::new(nusa_engine_child::ChildEngine::with_default_php())
-        }
+        EngineKind::Wasm => Arc::new(nusa_engine_wasm::WasmEngine::stub()),
+        EngineKind::Child => Arc::new(nusa_engine_child::ChildEngine::with_default_php()),
     };
 
     // 4. Apply Security BEFORE axum::serve (m15-anti-pattern: security first)
-    nusa_security::apply_landlock(
-        cfg.code_dir.as_ref(),
-        cfg.tmp_dir.as_ref(),
-    )?;
+    nusa_security::apply_landlock(cfg.code_dir.as_ref(), cfg.tmp_dir.as_ref())?;
     nusa_security::apply_seccomp()?;
 
     // 5. Initialize Plugins
@@ -127,7 +134,7 @@ async fn start_server(config_path: &str) -> anyhow::Result<()> {
 
     // 9. Resource Guard
     let resource_guard = ResourceGuard {
-        max_request_bytes: cfg.max_workers * 1024 * 1024,
+        max_request_bytes: 10 * 1024 * 1024, // 10MB default
         request_timeout_ms: cfg.timeout_ms,
         max_concurrent: cfg.max_workers,
     };

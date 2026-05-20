@@ -8,8 +8,8 @@
 use axum::{
     body::Body,
     http::{Request, StatusCode},
-    response::Response,
     middleware::Next,
+    response::Response,
 };
 
 use nusa_core::TenantId;
@@ -17,7 +17,8 @@ use nusa_core::TenantId;
 /// Extract tenant ID from headers.
 pub fn extract_tenant(headers: &http::HeaderMap) -> Option<TenantId> {
     if let Some(header) = headers.get("x-tenant-id")
-        && let Ok(value) = header.to_str() {
+        && let Ok(value) = header.to_str()
+    {
         return Some(TenantId::new(value));
     }
 
@@ -26,7 +27,8 @@ pub fn extract_tenant(headers: &http::HeaderMap) -> Option<TenantId> {
         && let Some(subdomain) = host_str.split('.').next()
         && !subdomain.is_empty()
         && subdomain != "localhost"
-        && subdomain != "127.0.0.1" {
+        && subdomain != "127.0.0.1"
+    {
         return Some(TenantId::new(subdomain));
     }
 
@@ -36,7 +38,8 @@ pub fn extract_tenant(headers: &http::HeaderMap) -> Option<TenantId> {
 /// Extract W3C TraceContext trace ID from headers.
 pub fn extract_trace_id(headers: &http::HeaderMap) -> nusa_core::TraceId {
     if let Some(traceparent) = headers.get("traceparent")
-        && let Ok(value) = traceparent.to_str() {
+        && let Ok(value) = traceparent.to_str()
+    {
         let parts: Vec<&str> = value.split('-').collect();
         if parts.len() >= 3 && parts[1].len() == 32 {
             let hex_str = parts[1];
@@ -57,14 +60,12 @@ pub fn extract_trace_id(headers: &http::HeaderMap) -> nusa_core::TraceId {
 }
 
 /// Request size limit middleware (m13-domain-error: reject oversized requests)
-pub async fn request_size_limit(
-    req: Request<Body>,
-    next: Next,
-) -> Response<Body> {
+pub async fn request_size_limit(req: Request<Body>, next: Next) -> Response<Body> {
     if let Some(cl) = req.headers().get(http::header::CONTENT_LENGTH)
         && let Ok(s) = cl.to_str()
         && let Ok(len) = s.parse::<usize>()
-        && len > 10 * 1024 * 1024 {
+        && len > 10 * 1024 * 1024
+    {
         return Response::builder()
             .status(StatusCode::PAYLOAD_TOO_LARGE)
             .body(Body::from("Request too large"))

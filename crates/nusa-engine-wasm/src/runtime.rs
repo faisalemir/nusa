@@ -33,7 +33,8 @@ impl ResourceLimiter for WasmLimits {
             return Ok(false);
         }
         if let Some(max) = maximum
-            && desired > max {
+            && desired > max
+        {
             return Ok(false);
         }
         Ok(current <= desired)
@@ -49,7 +50,8 @@ impl ResourceLimiter for WasmLimits {
             return Ok(false);
         }
         if let Some(max) = maximum
-            && desired > max {
+            && desired > max
+        {
             return Ok(false);
         }
         Ok(current <= desired)
@@ -81,7 +83,8 @@ impl WasmRuntime {
         &self,
         _work_dir: &std::path::Path,
     ) -> Result<wasmtime::Store<wasmtime_wasi::WasiCtx>, wasmtime::Error> {
-        let store = wasmtime::Store::new(&self.engine, wasmtime_wasi::WasiCtxBuilder::new().build());
+        let store =
+            wasmtime::Store::new(&self.engine, wasmtime_wasi::WasiCtxBuilder::new().build());
         // B3: Resource limits via wasmtime::Store::limiter() in wasmtime 44
         // Full implementation would use: store.limiter(|ctx| &mut WasmLimits::new(...))
         // For now, fuel consumption is configured via Config::consume_fuel(true)

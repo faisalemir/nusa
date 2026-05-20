@@ -1,5 +1,6 @@
 #![deny(unsafe_code)]
 #![warn(clippy::all)]
+#![allow(missing_docs)]
 
 //! Plugin system for pre/post execution hooks in the request lifecycle.
 //!

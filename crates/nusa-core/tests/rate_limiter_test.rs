@@ -71,7 +71,10 @@ fn rate_limiter_tenant_isolation() {
     let allowed_b = limiter.is_allowed(&tenant_b);
 
     // === Assert ===
-    assert!(!limiter.is_allowed(&tenant_a), "tenant A must be rate limited");
+    assert!(
+        !limiter.is_allowed(&tenant_a),
+        "tenant A must be rate limited"
+    );
     assert!(allowed_b, "tenant B must still be allowed");
 }
 
@@ -133,7 +136,10 @@ fn rate_limiter_large_burst_allows_many() {
     let results: Vec<bool> = (0..100).map(|_| limiter.is_allowed(&tenant)).collect();
 
     // === Assert ===
-    assert!(results.iter().all(|&r| r), "all 100 requests must be allowed");
+    assert!(
+        results.iter().all(|&r| r),
+        "all 100 requests must be allowed"
+    );
 }
 
 // ── Boundary Values ──
@@ -167,8 +173,8 @@ fn rate_limiter_max_rpm_no_overflow() {
 /// Exactly 100 allowed, 100 rejected.
 #[test]
 fn rate_limiter_concurrent_access_thread_safe() {
-    use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::thread;
 
     // === Arrange ===

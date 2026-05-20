@@ -78,12 +78,19 @@ fn ipc_broadcast_event_roundtrip() {
     );
 
     // === Act ===
-    let framed = msg.to_framed_bytes().expect("broadcast event must serialize");
+    let framed = msg
+        .to_framed_bytes()
+        .expect("broadcast event must serialize");
     let decoded = IpcMessage::from_framed_bytes(&framed).expect("broadcast event must deserialize");
 
     // === Assert ===
     match decoded {
-        IpcMessage::BroadcastEvent { channel, event, data, tenants } => {
+        IpcMessage::BroadcastEvent {
+            channel,
+            event,
+            data,
+            tenants,
+        } => {
             assert_eq!(channel, "private-channel.42");
             assert_eq!(event, "OrderCreated");
             assert_eq!(data, r#"{"id": 1}"#);
@@ -115,7 +122,12 @@ fn ipc_broadcast_event_empty_fields() {
 
     // === Assert ===
     match decoded {
-        IpcMessage::BroadcastEvent { channel, event, data, tenants } => {
+        IpcMessage::BroadcastEvent {
+            channel,
+            event,
+            data,
+            tenants,
+        } => {
             assert!(channel.is_empty());
             assert!(event.is_empty());
             assert!(data.is_empty());
@@ -135,12 +147,7 @@ fn ipc_broadcast_event_empty_fields() {
 fn ipc_broadcast_event_large_payload() {
     // === Arrange ===
     let large_data = "x".repeat(1_000_000);
-    let msg = IpcMessage::broadcast_event(
-        "test".into(),
-        "test".into(),
-        large_data.clone(),
-        vec![],
-    );
+    let msg = IpcMessage::broadcast_event("test".into(), "test".into(), large_data.clone(), vec![]);
 
     // === Act ===
     let framed = msg.to_framed_bytes().unwrap();
@@ -167,14 +174,22 @@ fn ipc_broadcast_event_large_payload() {
 fn trace_context_from_http_headers() {
     // === Arrange ===
     let mut headers = http::HeaderMap::new();
-    headers.insert("traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01".parse().unwrap());
+    headers.insert(
+        "traceparent",
+        "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+            .parse()
+            .unwrap(),
+    );
     headers.insert("tracestate", "congo=t61rcWkgMzE".parse().unwrap());
 
     // === Act ===
     let ctx = TraceContext::from_http_headers(&headers);
 
     // === Assert ===
-    assert_eq!(ctx.traceparent, "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01");
+    assert_eq!(
+        ctx.traceparent,
+        "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+    );
     assert_eq!(ctx.tracestate, Some("congo=t61rcWkgMzE".into()));
 }
 
@@ -216,8 +231,14 @@ fn trace_context_inject_into_raw_headers() {
     ctx.inject_into(&mut headers);
 
     // === Assert ===
-    assert_eq!(headers.get("traceparent"), Some(&vec!["00-abc123-def456-01".into()]));
-    assert_eq!(headers.get("tracestate"), Some(&vec!["vendor=value".into()]));
+    assert_eq!(
+        headers.get("traceparent"),
+        Some(&vec!["00-abc123-def456-01".into()])
+    );
+    assert_eq!(
+        headers.get("tracestate"),
+        Some(&vec!["vendor=value".into()])
+    );
 }
 
 /// === Arrange ===
@@ -318,7 +339,12 @@ fn ipc_broadcast_null_bytes_preserved() {
 
     // === Assert ===
     match decoded {
-        IpcMessage::BroadcastEvent { channel, event, data, .. } => {
+        IpcMessage::BroadcastEvent {
+            channel,
+            event,
+            data,
+            ..
+        } => {
             assert!(channel.contains('\0'));
             assert!(event.contains('\0'));
             assert!(data.contains('\0'));

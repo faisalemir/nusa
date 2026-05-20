@@ -36,7 +36,11 @@ impl WsManager {
         // to all active WebSocket connections for this tenant
         for entry in self.connections.iter() {
             if entry.value() == tenant_id {
-                info!("Broadcasting to tenant {} connection {}", tenant_id.as_str(), entry.key());
+                info!(
+                    "Broadcasting to tenant {} connection {}",
+                    tenant_id.as_str(),
+                    entry.key()
+                );
             }
         }
     }

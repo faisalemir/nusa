@@ -7,9 +7,10 @@
 
 #![deny(unsafe_code)]
 #![warn(clippy::all)]
+#![allow(missing_docs)]
 
-pub mod metrics;
 pub mod export;
+pub mod metrics;
 
 use opentelemetry::global;
 use opentelemetry::trace::TracerProvider as _;
@@ -55,8 +56,7 @@ pub fn init_tracing() -> anyhow::Result<()> {
 
 /// Initialize Prometheus metrics recorder using the `metrics` crate.
 pub fn init_metrics() -> anyhow::Result<()> {
-    let _recorder = metrics_exporter_prometheus::PrometheusBuilder::new()
-        .install_recorder()?;
+    let _recorder = metrics_exporter_prometheus::PrometheusBuilder::new().install_recorder()?;
 
     // Pre-initialize all metric handles so they're ready to use
     let _ = metrics::NusaMetrics::init();
