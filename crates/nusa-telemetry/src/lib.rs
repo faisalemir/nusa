@@ -73,8 +73,7 @@ pub fn init_metrics() -> anyhow::Result<metrics_exporter_prometheus::PrometheusH
     Ok(recorder)
 }
 
-/// Helper to create a span with trace context.
-#[allow(dead_code)]
+/// Create a span with trace context for request tracing.
 pub fn create_span(_name: &str, trace_id: &str) -> tracing::Span {
     tracing::info_span!("request", trace_id = %trace_id)
 }

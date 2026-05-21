@@ -11,9 +11,13 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use tracing::{info, warn};
 
+#[cfg(unix)]
+use std::process::Command;
+
 #[cfg(not(unix))]
 use tokio::net::TcpStream;
 
+use crate::error::WorkerError;
 use nusa_ipc::protocol::IpcMessage;
 use nusa_ipc::transport::IpcTransport;
 
@@ -46,7 +50,7 @@ impl Worker {
     /// On Unix: spawns PHP with Unix socket path.
     /// On non-Unix: spawns PHP worker and connects via TCP on a configurable port.
     #[cfg(unix)]
-    pub async fn spawn(id: usize, app_root: PathBuf, _max_memory_mb: u64) -> anyhow::Result<Self> {
+    pub async fn spawn(id: usize, app_root: PathBuf, _max_memory_mb: u64) -> Result<Self, WorkerError> {
         let socket_dir = app_root.join(".octane");
         tokio::fs::create_dir_all(&socket_dir).await?;
         let socket_path = socket_dir.join(format!("worker-{}.sock", id));
@@ -98,15 +102,15 @@ impl Worker {
                     id,
                     std::mem::discriminant(&other)
                 );
-                anyhow::bail!("Handshake failed: unexpected response");
+                return Err(WorkerError::Handshake("unexpected response".into()));
             }
             Ok(Err(e)) => {
                 warn!("Worker {} handshake read error: {}", id, e);
-                anyhow::bail!("Handshake failed: {e}");
+                return Err(WorkerError::Handshake(e.to_string()));
             }
             Err(_) => {
-                warn!("Worker {} handshake timeout");
-                anyhow::bail!("Handshake timeout: worker did not respond within 5s");
+                warn!("Worker {} handshake timeout", id);
+                return Err(WorkerError::Handshake("timeout: worker did not respond within 5s".into()));
             }
         }
 
@@ -126,7 +130,7 @@ impl Worker {
 
     /// Spawn a new PHP worker process and connect via TCP (Windows).
     #[cfg(not(unix))]
-    pub async fn spawn(id: usize, _app_root: PathBuf, _max_memory_mb: u64) -> anyhow::Result<Self> {
+    pub async fn spawn(id: usize, _app_root: PathBuf, _max_memory_mb: u64) -> Result<Self, WorkerError> {
         // On Windows, try to connect to worker via TCP on a pre-assigned port
         let port = 19000 + id as u16; // Each worker gets a unique port
         let addr = format!("127.0.0.1:{}", port);
@@ -170,15 +174,15 @@ impl Worker {
                         id,
                         std::mem::discriminant(&other)
                     );
-                    anyhow::bail!("Handshake failed: unexpected response");
+                    return Err(WorkerError::Handshake("unexpected response".into()));
                 }
                 Ok(Err(e)) => {
                     warn!("Worker {} handshake read error: {}", id, e);
-                    anyhow::bail!("Handshake failed: {e}");
+                    return Err(WorkerError::Handshake(e.to_string()));
                 }
                 Err(_) => {
                     warn!("Worker {} handshake timeout (TCP)", id);
-                    anyhow::bail!("Handshake timeout: worker did not respond within 5s");
+                    return Err(WorkerError::Handshake("timeout: worker did not respond within 5s".into()));
                 }
             }
 
@@ -215,7 +219,7 @@ impl Worker {
         method: String,
         uri: String,
         timeout_ms: u64,
-    ) -> anyhow::Result<IpcMessage> {
+    ) -> Result<IpcMessage, WorkerError> {
         if let Some(ref mut transport) = self.transport {
             self.state = WorkerState::Busy;
             let result = transport
@@ -227,9 +231,9 @@ impl Worker {
                 self.error_count.fetch_add(1, Ordering::SeqCst);
             }
             self.state = WorkerState::Idle;
-            result
+            result.map_err(WorkerError::Ipc)
         } else {
-            anyhow::bail!("Worker {} has no transport (stub mode)", self.id);
+            Err(WorkerError::NoTransport(self.id))
         }
     }
 
@@ -241,7 +245,7 @@ impl Worker {
     }
 
     /// Stop this worker gracefully.
-    pub async fn stop(&mut self) -> anyhow::Result<()> {
+    pub async fn stop(&mut self) -> Result<(), WorkerError> {
         if let Some(ref mut transport) = self.transport {
             transport.send(IpcMessage::Shutdown).await?;
         }
@@ -265,14 +269,10 @@ pub struct WorkerPool {
     max_requests: u64,
     total_handled: AtomicU64,
     total_errors: AtomicU64,
-    /// Telemetry-driven recycling thresholds
-    #[allow(dead_code)]
-    rss_threshold_pct: u64,
-    #[allow(dead_code)]
-    error_rate_threshold_pct: u64,
 }
 
 impl WorkerPool {
+    /// Create a new worker pool with the given configuration.
     pub fn new(
         max_workers: usize,
         app_root: PathBuf,
@@ -288,37 +288,11 @@ impl WorkerPool {
             max_requests,
             total_handled: AtomicU64::new(0),
             total_errors: AtomicU64::new(0),
-            // Default telemetry thresholds
-            rss_threshold_pct: 90,
-            error_rate_threshold_pct: 2,
-        }
-    }
-
-    /// Create a pool with custom telemetry thresholds.
-    pub fn with_telemetry(
-        max_workers: usize,
-        app_root: PathBuf,
-        max_memory_mb: u64,
-        max_requests: u64,
-        rss_threshold_pct: u64,
-        error_rate_threshold_pct: u64,
-    ) -> Self {
-        Self {
-            workers: Vec::with_capacity(max_workers),
-            idle_queue: Vec::new(),
-            max_workers,
-            app_root,
-            max_memory_mb,
-            max_requests,
-            total_handled: AtomicU64::new(0),
-            total_errors: AtomicU64::new(0),
-            rss_threshold_pct,
-            error_rate_threshold_pct,
         }
     }
 
     /// Initialize the worker pool.
-    pub async fn initialize(&mut self) -> anyhow::Result<()> {
+    pub async fn initialize(&mut self) -> Result<(), WorkerError> {
         info!("Initializing worker pool with {} workers", self.max_workers);
 
         for i in 0..self.max_workers {
@@ -348,7 +322,7 @@ impl WorkerPool {
     }
 
     /// Recycle a worker: stop it and spawn a replacement.
-    pub async fn recycle_worker(&mut self, worker_id: usize) -> anyhow::Result<()> {
+    pub async fn recycle_worker(&mut self, worker_id: usize) -> Result<(), WorkerError> {
         info!("Recycling worker {}", worker_id);
         // Remove from idle queue first (worker is draining)
         self.idle_queue.retain(|&id| id != worker_id);
@@ -365,7 +339,7 @@ impl WorkerPool {
     }
 
     /// Shut down all workers gracefully.
-    pub async fn shutdown(&mut self) -> anyhow::Result<()> {
+    pub async fn shutdown(&mut self) -> Result<(), WorkerError> {
         info!("Shutting down worker pool ({} workers)", self.workers.len());
 
         for worker in self.workers.iter_mut() {

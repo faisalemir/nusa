@@ -24,8 +24,7 @@ async fn state_reset_orchestrator_request_received_increments() {
     orchestrator
         .emit_event(OctaneEvent::RequestReceived {
             request_id: "req-1".to_string(),
-        })
-        .unwrap();
+        });
 
     let stats = orchestrator.stats();
     assert_eq!(stats.total_requests_processed, 1);
@@ -41,8 +40,7 @@ async fn state_reset_orchestrator_request_terminated_increments_resets() {
         .emit_event(OctaneEvent::RequestTerminated {
             request_id: "req-1".to_string(),
             status: 200,
-        })
-        .unwrap();
+        });
 
     let stats = orchestrator.stats();
     assert_eq!(stats.total_resets_performed, 1);
@@ -55,8 +53,7 @@ async fn state_reset_orchestrator_worker_stopping_increments_stops() {
     orchestrator.initialize();
 
     orchestrator
-        .emit_event(OctaneEvent::WorkerStopping { worker_id: 0 })
-        .unwrap();
+        .emit_event(OctaneEvent::WorkerStopping { worker_id: 0 });
 
     let stats = orchestrator.stats();
     assert_eq!(stats.total_worker_stops, 1);
@@ -72,8 +69,7 @@ async fn state_reset_orchestrator_multiple_events_accumulate() {
         orchestrator
             .emit_event(OctaneEvent::RequestReceived {
                 request_id: format!("req-{}", i),
-            })
-            .unwrap();
+            });
     }
 
     // 3 requests terminated
@@ -82,15 +78,13 @@ async fn state_reset_orchestrator_multiple_events_accumulate() {
             .emit_event(OctaneEvent::RequestTerminated {
                 request_id: format!("req-{}", i),
                 status: 200,
-            })
-            .unwrap();
+            });
     }
 
     // 2 workers stopping
     for i in 0..2 {
         orchestrator
-            .emit_event(OctaneEvent::WorkerStopping { worker_id: i })
-            .unwrap();
+            .emit_event(OctaneEvent::WorkerStopping { worker_id: i });
     }
 
     let stats = orchestrator.stats();
@@ -110,8 +104,7 @@ async fn state_reset_orchestrator_broadcast_subscribers_receive() {
     orchestrator
         .emit_event(OctaneEvent::RequestReceived {
             request_id: "req-broadcast".to_string(),
-        })
-        .unwrap();
+        });
 
     let received = tokio::time::timeout(Duration::from_millis(100), subscriber.recv())
         .await
@@ -141,8 +134,7 @@ async fn state_reset_orchestrator_custom_action_executed() {
     orchestrator
         .emit_event(OctaneEvent::RequestReceived {
             request_id: "req-custom".to_string(),
-        })
-        .unwrap();
+        });
 
     assert_eq!(counter.load(Ordering::SeqCst), 1);
 }
@@ -168,8 +160,7 @@ async fn state_reset_orchestrator_concurrent_emits() {
             for i in 0..100 {
                 o.emit_event(OctaneEvent::RequestReceived {
                     request_id: format!("t{}-r{}", thread_id, i),
-                })
-                .unwrap();
+                });
             }
         }));
     }
@@ -194,8 +185,7 @@ async fn state_reset_orchestrator_multiple_subscribers() {
     orchestrator
         .emit_event(OctaneEvent::RequestReceived {
             request_id: "req-multi".to_string(),
-        })
-        .unwrap();
+        });
 
     // All subscribers should receive
     for (i, sub) in [&mut sub1, &mut sub2, &mut sub3].iter_mut().enumerate() {

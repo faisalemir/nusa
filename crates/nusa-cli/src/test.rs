@@ -203,8 +203,7 @@ impl TestRunner {
                     nusa_octane_worker::state_reset::OctaneEvent::RequestReceived {
                         request_id: "test-reset".to_string(),
                     },
-                )
-                .ok();
+                );
         }
     }
 

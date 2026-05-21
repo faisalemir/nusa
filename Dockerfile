@@ -69,8 +69,8 @@ RUN chmod +x /bin/nusa
 VOLUME ["/app/public", "/tmp/nusa"]
 
 ENV RUST_LOG=info \
-    PHPRT_VFS_ROOT=/app/public \
-    PHPRT_TMP_DIR=/tmp/nusa
+    NUSA_VFS_ROOT=/app/public \
+    NUSA_TMP_DIR=/tmp/nusa
 
 EXPOSE 8080 9090
 USER nusa

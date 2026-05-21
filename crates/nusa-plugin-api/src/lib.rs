@@ -54,7 +54,7 @@ impl PluginRegistry {
     /// Run pre-exec hooks for all plugins.
     /// m07-concurrency: Clone Arc refs outside the lock, drop guard before await.
     pub async fn run_pre_exec(&self, ctx: &mut RequestContext) -> Result<()> {
-        let plugins = self.plugins.lock().clone();
+        let plugins: Vec<_> = self.plugins.lock().iter().cloned().collect();
         for plugin in plugins {
             plugin.pre_exec(ctx).await?;
         }
@@ -63,7 +63,7 @@ impl PluginRegistry {
 
     /// Run post-exec hooks for all plugins.
     pub async fn run_post_exec(&self, ctx: &RequestContext) -> Result<()> {
-        let plugins = self.plugins.lock().clone();
+        let plugins: Vec<_> = self.plugins.lock().iter().cloned().collect();
         for plugin in plugins {
             plugin.post_exec(ctx).await?;
         }

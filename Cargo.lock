@@ -2582,7 +2582,6 @@ dependencies = [
 name = "nusa-ipc"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "bytes",
  "http",
  "nusa-core",
@@ -2599,7 +2598,6 @@ dependencies = [
 name = "nusa-octane-worker"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "bytes",
  "nusa-core",
  "nusa-ipc",

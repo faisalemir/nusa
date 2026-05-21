@@ -1,7 +1,7 @@
 # Nusa PHP Runtime Configuration
 #
 # Copy this file to config.toml and adjust settings as needed.
-# Environment variables prefixed with PHPRT_ override these values.
+# Environment variables prefixed with NUSA_ override these values.
 
 # PHP execution engine: "ffi" | "wasm" | "child"
 engine = "child"

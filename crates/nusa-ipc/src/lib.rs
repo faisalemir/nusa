@@ -10,11 +10,13 @@
 #![allow(missing_docs)]
 #![allow(clippy::large_enum_variant, clippy::box_collection)]
 
+pub mod error;
 pub mod framing;
 pub mod protocol;
 pub mod trace;
 pub mod transport;
 
+pub use error::IpcError;
 pub use framing::*;
 pub use protocol::*;
 pub use trace::*;

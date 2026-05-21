@@ -14,6 +14,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 #[cfg(not(unix))]
 use tokio::net::TcpStream;
 
+use crate::error::IpcError;
 use crate::protocol::{IpcMessage, RequestId};
 use crate::trace::TraceContext;
 use std::collections::HashMap;
@@ -57,7 +58,7 @@ impl IpcTransport {
     /// Connect to a UnixSocket or TCP server.
     /// On Unix: tries Unix socket first, falls back to TCP if path contains `:`.
     /// On Windows: uses TCP transport.
-    pub async fn connect(path: &str) -> anyhow::Result<Self> {
+    pub async fn connect(path: &str) -> Result<Self, IpcError> {
         #[cfg(unix)]
         {
             // If path looks like a TCP address (contains :), use TCP
@@ -81,7 +82,7 @@ impl IpcTransport {
     }
 
     /// Create a TCP transport directly (useful for Windows or explicit TCP).
-    pub async fn connect_tcp(host: &str, port: u16) -> anyhow::Result<Self> {
+    pub async fn connect_tcp(host: &str, port: u16) -> Result<Self, IpcError> {
         let addr = format!("{host}:{port}");
         #[cfg(unix)]
         {
@@ -98,28 +99,28 @@ impl IpcTransport {
     }
 
     /// Send an IPC message.
-    pub async fn send(&mut self, msg: IpcMessage) -> anyhow::Result<()> {
+    pub async fn send(&mut self, msg: IpcMessage) -> Result<(), IpcError> {
         #[cfg(unix)]
         {
-            let framed = msg.to_framed_bytes()?;
+            let framed = msg.to_framed_bytes().map_err(IpcError::Serialization)?;
             self.stream.write_all(&framed).await?;
             Ok(())
         }
         #[cfg(not(unix))]
         {
-            let framed = msg.to_framed_bytes()?;
+            let framed = msg.to_framed_bytes().map_err(IpcError::Serialization)?;
             self.stream.write_all(&framed).await?;
             Ok(())
         }
     }
 
     /// Send a keepalive heartbeat (C3).
-    pub async fn send_keepalive(&mut self) -> anyhow::Result<()> {
+    pub async fn send_keepalive(&mut self) -> Result<(), IpcError> {
         self.send(IpcMessage::keepalive()).await
     }
 
     /// Receive an IPC message.
-    pub async fn recv(&mut self) -> anyhow::Result<IpcMessage> {
+    pub async fn recv(&mut self) -> Result<IpcMessage, IpcError> {
         #[cfg(unix)]
         {
             let mut header = [0u8; 4];
@@ -133,8 +134,7 @@ impl IpcTransport {
             frame_data.extend_from_slice(&header);
             frame_data.extend_from_slice(&payload);
 
-            IpcMessage::from_framed_bytes(&frame_data)
-                .map_err(|e| anyhow::anyhow!("Failed to decode IPC message: {}", e))
+            IpcMessage::from_framed_bytes(&frame_data).map_err(|e| IpcError::Framing(e.to_string()))
         }
         #[cfg(not(unix))]
         {
@@ -149,8 +149,7 @@ impl IpcTransport {
             frame_data.extend_from_slice(&header);
             frame_data.extend_from_slice(&payload);
 
-            IpcMessage::from_framed_bytes(&frame_data)
-                .map_err(|e| anyhow::anyhow!("Failed to decode IPC message: {}", e))
+            IpcMessage::from_framed_bytes(&frame_data).map_err(|e| IpcError::Framing(e.to_string()))
         }
     }
 
@@ -161,7 +160,7 @@ impl IpcTransport {
         uri: String,
         headers: HashMap<String, Vec<String>>,
         timeout_ms: u64,
-    ) -> anyhow::Result<IpcMessage> {
+    ) -> Result<IpcMessage, IpcError> {
         let id = RequestId::new();
         let trace_context = TraceContext::from_raw_headers(&headers);
 
@@ -183,7 +182,8 @@ impl IpcTransport {
         self.send(request).await?;
         let response =
             tokio::time::timeout(std::time::Duration::from_millis(timeout_ms), self.recv())
-                .await??;
+                .await
+                .map_err(|_| IpcError::Handshake("timeout waiting for response".into()))??;
 
         Ok(response)
     }
@@ -194,7 +194,7 @@ impl IpcTransport {
         &mut self,
         interval_secs: u64,
         missed_heartbeats: &mut u32,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), IpcError> {
         let interval = std::time::Duration::from_secs(interval_secs);
         loop {
             tokio::time::sleep(interval).await;
@@ -208,7 +208,7 @@ impl IpcTransport {
                 _ => {
                     *missed_heartbeats += 1;
                     if *missed_heartbeats >= 3 {
-                        return Err(anyhow::anyhow!("Worker missed 3 consecutive heartbeats"));
+                        return Err(IpcError::MissedHeartbeats(*missed_heartbeats));
                     }
                 }
             }

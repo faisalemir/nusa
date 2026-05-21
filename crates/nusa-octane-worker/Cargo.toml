@@ -18,4 +18,3 @@ tracing.workspace = true
 uuid.workspace = true
 bytes.workspace = true
 parking_lot.workspace = true
-anyhow.workspace = true

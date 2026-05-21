@@ -57,7 +57,7 @@ Client → TLS/HTTP2 → Rust Gateway (Axum)
 |-------|--------|
 | `cargo check --workspace` | ✅ Clean |
 | `cargo clippy --workspace -- -D warnings` | ✅ 0 warnings |
-| `cargo test --workspace` | ✅ 58/58 pass |
+| `cargo nextest run --workspace` | ✅ 58/58 pass |
 | `cargo audit` | ✅ 0 CVEs |
 
 ## Quick Start
@@ -109,11 +109,11 @@ tmp_dir = "/tmp/nusa"
 hot_reload = true
 ```
 
-Environment variables override config values (prefix with `PHPRT_`):
+Environment variables override config values (prefix with `NUSA_`):
 
 ```bash
-export PHPRT_MAX_WORKERS=8
-export PHPRT_TIMEOUT_MS=60000
+export NUSA_MAX_WORKERS=8
+export NUSA_TIMEOUT_MS=60000
 ```
 
 ## Milestones

@@ -108,13 +108,22 @@ impl StaticFileHandler {
 
     fn build_response(&self, cached: CachedFile) -> Response<Body> {
         // domain-web: proper Cache-Control, Content-Type, Content-Length headers
-        Response::builder()
-            .status(StatusCode::OK)
-            .header(header::CONTENT_TYPE, cached.content_type)
-            .header(header::CACHE_CONTROL, cached.cache_control)
-            .header(header::CONTENT_LENGTH, cached.content.len())
-            .body(Body::from(cached.content))
-            .expect("valid response")
+        let content_len = cached.content.len();
+        let mut response = Response::new(Body::from(cached.content));
+        *response.status_mut() = StatusCode::OK;
+        response.headers_mut().insert(
+            header::CONTENT_TYPE,
+            header::HeaderValue::from_str(&cached.content_type).unwrap(),
+        );
+        response.headers_mut().insert(
+            header::CACHE_CONTROL,
+            header::HeaderValue::from_str(&cached.cache_control).unwrap(),
+        );
+        response.headers_mut().insert(
+            header::CONTENT_LENGTH,
+            header::HeaderValue::from(content_len),
+        );
+        response
     }
 
     /// MIME type detection based on file extension (domain-web).

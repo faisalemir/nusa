@@ -273,8 +273,7 @@ async fn orchestrator_emits_events() {
     orchestrator.initialize();
 
     let event = OctaneEvent::WorkerStarted { worker_id: 0 };
-    let result = orchestrator.emit_event(event);
-    assert!(result.is_ok(), "Event emission must succeed");
+    orchestrator.emit_event(event); // should not panic
 }
 
 #[tokio::test]
@@ -298,7 +297,7 @@ async fn orchestrator_broadcast_subscribers() {
         recv_result.is_ok(),
         "Subscriber must receive broadcasted event within timeout",
     );
-    sender.await.unwrap().unwrap();
+    sender.await.unwrap();
 }
 
 #[tokio::test]
@@ -311,8 +310,7 @@ async fn orchestrator_stats_increment() {
         orchestrator
             .emit_event(OctaneEvent::RequestReceived {
                 request_id: format!("req-{}", i),
-            })
-            .unwrap();
+            });
     }
 
     let stats = orchestrator.stats();
@@ -335,8 +333,7 @@ async fn orchestrator_custom_action() {
     orchestrator
         .emit_event(OctaneEvent::RequestReceived {
             request_id: "test".into(),
-        })
-        .unwrap();
+        });
 }
 
 #[tokio::test]

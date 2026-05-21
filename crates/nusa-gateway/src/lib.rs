@@ -19,6 +19,7 @@ pub mod circuit_breaker;
 pub mod health;
 pub mod middleware;
 pub mod quic;
+pub mod response;
 pub mod sse;
 pub mod static_files;
 pub mod tenant_circuit_breaker;
@@ -199,10 +200,7 @@ async fn static_file_handler(
 ) -> Response<Body> {
     match state.static_handler.serve(&path).await {
         Some(resp) => resp,
-        None => Response::builder()
-            .status(StatusCode::NOT_FOUND)
-            .body(Body::from("Not Found"))
-            .expect("builder with valid status always succeeds"),
+        None => response::status_response(StatusCode::NOT_FOUND, "Not Found"),
     }
 }
 
@@ -267,10 +265,10 @@ async fn handler(State(state): State<AppState>, req: Request<Body>) -> Response<
         tracing::warn!("circuit breaker open, rejecting request");
         state.metrics.requests_failed_total.increment(1);
         state.health_state.record_error();
-        return Response::builder()
-            .status(StatusCode::SERVICE_UNAVAILABLE)
-            .body(Body::from("Service Unavailable: Circuit Open"))
-            .expect("builder with valid status always succeeds");
+        return response::status_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Service Unavailable: Circuit Open",
+        );
     }
 
     // Check backpressure
@@ -280,10 +278,10 @@ async fn handler(State(state): State<AppState>, req: Request<Body>) -> Response<
             tracing::warn!("backpressure limit reached, rejecting request");
             state.metrics.requests_failed_total.increment(1);
             state.health_state.record_error();
-            return Response::builder()
-                .status(StatusCode::SERVICE_UNAVAILABLE)
-                .body(Body::from("Service Unavailable: Too Many Requests"))
-                .expect("builder with valid status always succeeds");
+            return response::status_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Service Unavailable: Too Many Requests",
+            );
         }
     };
 
@@ -292,10 +290,7 @@ async fn handler(State(state): State<AppState>, req: Request<Body>) -> Response<
         Ok(ctx) => ctx,
         Err(status) => {
             state.metrics.requests_failed_total.increment(1);
-            return Response::builder()
-                .status(status)
-                .body(Body::from("Bad Request"))
-                .expect("builder with valid status always succeeds");
+            return response::status_response(status, "Bad Request");
         }
     };
 
@@ -304,29 +299,25 @@ async fn handler(State(state): State<AppState>, req: Request<Body>) -> Response<
     if let Some(tenant_id) = &tenant_id_for_cb {
         if !state.rate_limiter.is_allowed(tenant_id) {
             state.metrics.requests_failed_total.increment(1);
-            return Response::builder()
-                .status(StatusCode::TOO_MANY_REQUESTS)
-                .header("Retry-After", "60")
-                .body(Body::from("Too Many Requests: Rate Limit Exceeded"))
-                .expect("builder with valid status always succeeds");
+            return response::status_response(
+                StatusCode::TOO_MANY_REQUESTS,
+                "Too Many Requests: Rate Limit Exceeded",
+            );
         }
 
         // D3: Check per-tenant circuit breaker
         if !state.tenant_cb.is_allowed(tenant_id) {
             state.metrics.requests_failed_total.increment(1);
-            return Response::builder()
-                .status(StatusCode::SERVICE_UNAVAILABLE)
-                .body(Body::from("Service Unavailable: Tenant Circuit Open"))
-                .expect("builder with valid status always succeeds");
+            return response::status_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Service Unavailable: Tenant Circuit Open",
+            );
         }
 
         // Check tenant is enabled
         if !state.tenants.is_enabled(tenant_id) {
             state.metrics.requests_failed_total.increment(1);
-            return Response::builder()
-                .status(StatusCode::FORBIDDEN)
-                .body(Body::from("Tenant not enabled"))
-                .expect("builder with valid status always succeeds");
+            return response::status_response(StatusCode::FORBIDDEN, "Tenant not enabled");
         }
     }
 
@@ -359,11 +350,8 @@ async fn handler(State(state): State<AppState>, req: Request<Body>) -> Response<
             state.health_state.record_error();
             drop(permit);
             tracing::error!(err = %e, "engine execution failed");
-            let status = e.to_http_status();
-            Response::builder()
-                .status(status)
-                .body(Body::from(format!("Upstream Error: {e}")))
-                .expect("builder with valid status always succeeds")
+            let status = StatusCode::from_u16(e.to_http_status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+            response::status_response(status, format!("Upstream Error: {e}"))
         }
     }
 }
@@ -408,8 +396,6 @@ async fn build_request_context(
 
 /// Convert PhpResponse to HTTP Response.
 fn build_http_response(php_resp: PhpResponse) -> Response<Body> {
-    Response::builder()
-        .status(php_resp.status)
-        .body(Body::from(php_resp.body.to_vec()))
-        .expect("builder with valid status always succeeds")
+    let status = StatusCode::from_u16(php_resp.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+    response::status_response(status, php_resp.body.to_vec())
 }

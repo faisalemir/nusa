@@ -77,7 +77,7 @@ impl StateResetOrchestrator {
     }
 
     /// Emit an event and trigger registered reset actions.
-    pub fn emit_event(&self, event: OctaneEvent) -> anyhow::Result<()> {
+    pub fn emit_event(&self, event: OctaneEvent) {
         let event_name = match &event {
             OctaneEvent::WorkerStarted { .. } => "worker_started",
             OctaneEvent::RequestReceived { .. } => "request_received",
@@ -107,8 +107,6 @@ impl StateResetOrchestrator {
 
         // Broadcast to subscribers (non-blocking)
         let _ = self.event_tx.send(event);
-
-        Ok(())
     }
 
     /// Return current statistics.

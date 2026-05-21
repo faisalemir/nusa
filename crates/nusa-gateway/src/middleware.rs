@@ -24,12 +24,16 @@ pub fn extract_tenant(headers: &http::HeaderMap) -> Option<TenantId> {
 
     if let Some(host) = headers.get("host")
         && let Ok(host_str) = host.to_str()
-        && let Some(subdomain) = host_str.split('.').next()
-        && !subdomain.is_empty()
-        && subdomain != "localhost"
-        && subdomain != "127.0.0.1"
     {
-        return Some(TenantId::new(subdomain));
+        // Strip port if present
+        let host_without_port = host_str.split(':').next().unwrap_or(host_str);
+        if let Some(subdomain) = host_without_port.split('.').next()
+            && !subdomain.is_empty()
+            && subdomain != "localhost"
+            && subdomain != "127"
+        {
+            return Some(TenantId::new(subdomain));
+        }
     }
 
     None
@@ -44,8 +48,8 @@ pub fn extract_trace_id(headers: &http::HeaderMap) -> nusa_core::TraceId {
         if parts.len() >= 3 && parts[1].len() == 32 {
             let hex_str = parts[1];
             if let (Ok(high), Ok(low)) = (
-                u128::from_str_radix(&hex_str[..16], 16),
-                u128::from_str_radix(&hex_str[16..], 16),
+                u64::from_str_radix(&hex_str[..16], 16),
+                u64::from_str_radix(&hex_str[16..], 16),
             ) {
                 let mut bytes = [0u8; 16];
                 bytes[..8].copy_from_slice(&high.to_be_bytes());
@@ -66,10 +70,7 @@ pub async fn request_size_limit(req: Request<Body>, next: Next) -> Response<Body
         && let Ok(len) = s.parse::<usize>()
         && len > 10 * 1024 * 1024
     {
-        return Response::builder()
-            .status(StatusCode::PAYLOAD_TOO_LARGE)
-            .body(Body::from("Request too large"))
-            .expect("builder with valid status always succeeds");
+        return crate::response::status_response(StatusCode::PAYLOAD_TOO_LARGE, "Request too large");
     }
     next.run(req).await
 }

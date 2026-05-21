@@ -3,7 +3,7 @@
 ## 1. TLS Enforcement
 
 - TLS 1.3 only (no TLS 1.2 or below)
-- Configurable via `nusa.toml` or `PHPRT_TLS_CERT_PATH` / `PHPRT_TLS_KEY_PATH`
+- Configurable via `nusa.toml` or `NUSA_TLS_CERT_PATH` / `NUSA_TLS_KEY_PATH`
 - ACME automatic certificate management (Let's Encrypt, ZeroSSL)
 - HTTP → HTTPS auto-redirect when TLS is enabled
 - Certificate hot-reload via file watcher

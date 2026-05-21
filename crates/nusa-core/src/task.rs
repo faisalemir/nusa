@@ -53,8 +53,6 @@ pub struct TaskStatus {
 
 /// Stored task info for status queries.
 struct StoredTask {
-    #[allow(dead_code)]
-    completed: bool,
     result: Option<TaskResult>,
 }
 
@@ -307,7 +305,6 @@ fn complete_task(
     completed.lock().insert(
         task_id.to_string(),
         StoredTask {
-            completed: true,
             result: Some(result.clone()),
         },
     );
