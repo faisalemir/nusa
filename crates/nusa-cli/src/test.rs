@@ -74,21 +74,125 @@ impl TestRunner {
 
         info!("Running tests from {:?}", self.config.test_path);
 
-        // In production: enumerate test files, send to workers via IPC,
-        // collect results, aggregate statistics
-        //
-        // m07-concurrency: Each test runs on a worker from the isolated pool
-        // m13-domain-error: Failed tests don't affect production workers
+        // Enumerate test files in the test path
+        let test_files = self.enumerate_test_files();
+        let total = test_files.len();
 
-        let test_count = 0; // Placeholder
-        let passed = 0;
-        let failed = 0;
+        if total == 0 {
+            info!("No test files found in {:?}", self.config.test_path);
+            return Ok(TestResult {
+                total: 0,
+                passed: 0,
+                failed: 0,
+            });
+        }
+
+        info!("Found {} test files", total);
+
+        // Run each test file through a worker from the pool
+        let mut passed = 0;
+        let mut failed = 0;
+        let reset_between_tests = self.config.reset_between_tests;
+
+        if let Some(ref mut pool) = self.pool {
+            for test_file in &test_files {
+                // Reset state before each test if configured
+                if reset_between_tests {
+                    pool.shutdown().await.ok();
+                    // Re-initialize pool for clean state
+                    let _ = pool.initialize().await;
+                }
+
+                // Get an idle worker
+                let worker_id = pool.idle_count();
+                if worker_id > 0 {
+                    let method = "GET".to_string();
+                    let uri = format!("/test/{}", test_file.to_string_lossy());
+
+                    // Use worker by index directly to avoid borrow conflicts
+                    let idx = pool.idle_count() - 1;
+                    match pool.worker_mut(idx).handle_request(method, uri, 30000).await {
+                        Ok(_response) => {
+                            passed += 1;
+                            info!("PASS: {}", test_file.display());
+                        }
+                        Err(e) => {
+                            failed += 1;
+                            info!("FAIL: {} — {}", test_file.display(), e);
+                        }
+                    }
+
+                    // Return worker to idle queue
+                    pool.return_worker(pool.worker(idx).id);
+                } else {
+                    info!("No idle workers available, queuing test: {}", test_file.display());
+                    failed += 1;
+                }
+            }
+        }
+
+        // Run PHPUnit/Pest as fallback if no workers available
+        if self.pool.is_none() {
+            return self.run_php_tests().await;
+        }
 
         Ok(TestResult {
-            total: test_count,
+            total,
             passed,
             failed,
         })
+    }
+
+    /// Run tests via PHPUnit/Pest as fallback.
+    async fn run_php_tests(&self) -> anyhow::Result<TestResult> {
+        info!("Falling back to PHPUnit/Pest execution");
+
+        let output = tokio::process::Command::new("php")
+            .arg("vendor/bin/phpunit")
+            .arg("--configuration")
+            .arg(&self.config.test_path)
+            .arg("--teamcity")
+            .output()
+            .await?;
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        // Parse PHPUnit output for test counts
+        let total = stdout.matches("##teamcity[testCount").count();
+        let passed = stdout.matches("##teamcity[testFinished").count();
+        let failed = stdout.matches("##teamcity[testFailed").count();
+
+        if !stderr.is_empty() {
+            info!("PHPUnit stderr: {}", stderr);
+        }
+
+        Ok(TestResult {
+            total,
+            passed,
+            failed,
+        })
+    }
+
+    /// Enumerate test files in the test path.
+    fn enumerate_test_files(&self) -> Vec<PathBuf> {
+        let mut files = Vec::new();
+        if let Ok(entries) = std::fs::read_dir(&self.config.test_path) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_file() {
+                    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                        if ext == "php" && path.file_name().map_or(false, |n| {
+                            n.to_string_lossy().ends_with("Test.php")
+                                || n.to_string_lossy().ends_with("_test.php")
+                        }) {
+                            files.push(path);
+                        }
+                    }
+                }
+            }
+        }
+        files
     }
 
     /// Reset state between test runs (m12-lifecycle).

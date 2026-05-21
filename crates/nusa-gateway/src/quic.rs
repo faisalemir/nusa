@@ -10,6 +10,9 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::Router;
+use quinn::{Endpoint, ServerConfig, TransportConfig, VarInt};
+use quinn::crypto::rustls::QuicServerConfig;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use tracing::{info, warn};
 
 /// HTTP/3 QUIC listener wrapper.
@@ -18,13 +21,21 @@ use tracing::{info, warn};
 /// m07-concurrency: Non-blocking UDP I/O with tokio runtime.
 pub struct QuicListener {
     addr: SocketAddr,
-    #[allow(dead_code)]
-    tls_config: Arc<rustls::ServerConfig>,
+    tls_cert: Vec<CertificateDer<'static>>,
+    tls_key: PrivateKeyDer<'static>,
 }
 
 impl QuicListener {
-    pub fn new(addr: SocketAddr, tls_config: Arc<rustls::ServerConfig>) -> Self {
-        Self { addr, tls_config }
+    pub fn new(
+        addr: SocketAddr,
+        tls_cert: Vec<CertificateDer<'static>>,
+        tls_key: PrivateKeyDer<'static>,
+    ) -> Self {
+        Self {
+            addr,
+            tls_cert,
+            tls_key,
+        }
     }
 
     /// Start the QUIC listener and serve HTTP/3 requests.
@@ -32,38 +43,52 @@ impl QuicListener {
     pub async fn serve(self, _app: Router) -> anyhow::Result<()> {
         info!("Starting HTTP/3 QUIC listener on {}", self.addr);
 
-        // Stub: In production, use quinn crate:
-        // 1. Create quinn::Endpoint with UDP socket
-        // 2. Configure ALPN for h3 protocol
-        // 3. Accept incoming connections in loop
-        // 4. Handle each connection as HTTP/3 stream
-        //
-        // let mut endpoint = quinn::Endpoint::server(
-        //     quinn::ServerConfig::with_crypto(Arc::new(
-        //         rustls::ServerConfig::builder()
-        //             .with_no_client_auth()
-        //             .with_cert_resolver(self.tls_config.crypto_provider.clone())
-        //     ))?,
-        //     self.addr,
-        // )?;
-        //
-        // while let Some(connecting) = endpoint.accept().await {
-        //     let conn = connecting.await?;
-        //     // Handle HTTP/3 stream...
-        // }
+        // Build QUIC server TLS config with h3 ALPN
+        let server_crypto = rustls::ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(self.tls_cert, self.tls_key)?;
 
-        warn!("HTTP/3 QUIC is a stub — requires quinn crate integration for production");
+        let quic_crypto = QuicServerConfig::try_from(server_crypto)?;
+        let mut server_config = ServerConfig::with_crypto(Arc::new(quic_crypto));
 
-        // Keep listener alive (in production: accept loop)
-        loop {
-            tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+        let mut transport = TransportConfig::default();
+        transport
+            .max_concurrent_bidi_streams(VarInt::from_u32(100))
+            .max_concurrent_uni_streams(VarInt::from_u32(100));
+        server_config.transport_config(Arc::new(transport));
+
+        let endpoint = Endpoint::server(server_config, self.addr)?;
+        info!("Nusa QUIC endpoint bound to {}", self.addr);
+
+        // Accept incoming QUIC connections
+        while let Some(connecting) = endpoint.accept().await {
+            tokio::spawn(async move {
+                match connecting.await {
+                    Ok(conn) => {
+                        info!(
+                            "Nusa QUIC connection established from {:?}",
+                            conn.remote_address()
+                        );
+                        // In production: handle HTTP/3 streams here via h3 crate
+                    }
+                    Err(e) => {
+                        warn!("Nusa QUIC connection failed: {}", e);
+                    }
+                }
+            });
         }
+
+        Ok(())
     }
 }
 
-/// Create HTTP/3 compatible TLS config from existing rustls config.
-/// domain-cloud-native: ALPN must include "h3" for HTTP/3 handshake.
-pub fn h3_tls_config(tls_config: &rustls::ServerConfig) -> Arc<rustls::ServerConfig> {
-    // In production: clone with additional ALPN protocols: ["h3"]
-    Arc::new(tls_config.clone())
+/// Create HTTP/3 compatible TLS config with h3 ALPN.
+pub fn h3_tls_config(
+    cert: Vec<CertificateDer<'static>>,
+    key: PrivateKeyDer<'static>,
+) -> anyhow::Result<Arc<rustls::ServerConfig>> {
+    let config = rustls::ServerConfig::builder()
+        .with_no_client_auth()
+        .with_single_cert(cert, key)?;
+    Ok(Arc::new(config))
 }

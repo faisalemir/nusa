@@ -14,6 +14,7 @@ use axum::{
     http::Request,
 };
 use bytes::Bytes;
+use parking_lot::Mutex;
 use tower::ServiceExt;
 
 use nusa_core::{
@@ -27,8 +28,24 @@ use nusa_gateway::sse::SseManager;
 use nusa_gateway::static_files::StaticFileHandler;
 use nusa_gateway::tenant_circuit_breaker::TenantCircuitBreakers;
 use nusa_gateway::websocket::WsManager;
+use nusa_octane_worker::state_reset::StateResetOrchestrator;
 use nusa_plugin_api::PluginRegistry;
 use nusa_telemetry::metrics::NusaMetrics;
+use std::sync::OnceLock;
+
+static PROMETHEUS_HANDLE: OnceLock<Arc<metrics_exporter_prometheus::PrometheusHandle>> = OnceLock::new();
+
+fn get_prometheus_handle() -> Arc<metrics_exporter_prometheus::PrometheusHandle> {
+    PROMETHEUS_HANDLE
+        .get_or_init(|| {
+            Arc::new(
+                metrics_exporter_prometheus::PrometheusBuilder::new()
+                    .install_recorder()
+                    .expect("prometheus recorder"),
+            )
+        })
+        .clone()
+}
 
 struct OkEngine;
 
@@ -53,6 +70,9 @@ fn build_app() -> Router {
         request_timeout_ms: 5000,
         max_concurrent: 5,
     };
+
+    let prometheus_handle = get_prometheus_handle();
+
     app(
         Arc::new(OkEngine),
         Arc::new(PluginRegistry::new()),
@@ -68,6 +88,13 @@ fn build_app() -> Router {
         Arc::new(SseManager::new()),
         Arc::new(StaticFileHandler::new("/tmp".into())),
         Arc::new(NusaMetrics::init()),
+        prometheus_handle.clone(),
+        Arc::new(Mutex::new(None)),
+        Arc::new(Mutex::new({
+            let mut r = StateResetOrchestrator::new(128);
+            r.initialize();
+            r
+        })),
     )
 }
 

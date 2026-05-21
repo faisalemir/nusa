@@ -28,10 +28,20 @@ pub fn apply_landlock_rules(code_dir: &Path, tmp_dir: &Path) -> anyhow::Result<(
         .create()?
         .restrict_self()?;
 
-    // Note: full implementation requires landlock v2 for WRITE access
-    // This is a baseline that restricts read to code_dir only
     let _ = ruleset;
-    let _ = tmp_dir;
+
+    // Apply WRITE access to tmp_dir using a separate ruleset
+    let tmp_ruleset = Ruleset::new()
+        .handle_access(AccessFs::from_file(landlock::Access::WRITE))?
+        .create()?
+        .add_rule(PathBeneath::new(
+            tmp_dir,
+            AccessFs::WRITE_FILE | AccessFs::READ_FILE | AccessFs::READ_DIR | AccessFs::MAKE_FILE | AccessFs::REMOVE_FILE,
+        ))?
+        .create()?
+        .restrict_self()?;
+
+    let _ = tmp_ruleset;
 
     Ok(())
 }

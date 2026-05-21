@@ -9,6 +9,7 @@ description = "PHP child process engine (tokio::process)"
 
 [dependencies]
 nusa-core = { path = "../nusa-core" }
+nusa-ipc = { path = "../nusa-ipc" }
 http.workspace = true
 bytes.workspace = true
 tokio.workspace = true

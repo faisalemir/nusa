@@ -5,57 +5,9 @@
 //! - `m12-lifecycle`: WASM Store lifecycle management
 //! - `m05-type-driven`: ResourceLimiter trait implementation (B3)
 
-use wasmtime::ResourceLimiter;
-
-/// Resource limiter for WASM stores that enforces memory and fuel caps (B3).
-pub struct WasmLimits {
-    memory_cap: usize,
-    table_cap: usize,
-}
-
-impl WasmLimits {
-    pub fn new(memory_bytes: usize) -> Self {
-        Self {
-            memory_cap: memory_bytes,
-            table_cap: usize::MAX,
-        }
-    }
-}
-
-impl ResourceLimiter for WasmLimits {
-    fn memory_growing(
-        &mut self,
-        current: usize,
-        desired: usize,
-        maximum: Option<usize>,
-    ) -> Result<bool, wasmtime::Error> {
-        if desired > self.memory_cap {
-            return Ok(false);
-        }
-        if let Some(max) = maximum
-            && desired > max
-        {
-            return Ok(false);
-        }
-        Ok(current <= desired)
-    }
-
-    fn table_growing(
-        &mut self,
-        current: usize,
-        desired: usize,
-        maximum: Option<usize>,
-    ) -> Result<bool, wasmtime::Error> {
-        if desired > self.table_cap {
-            return Ok(false);
-        }
-        if let Some(max) = maximum
-            && desired > max
-        {
-            return Ok(false);
-        }
-        Ok(current <= desired)
-    }
+/// WASM runtime context stored alongside WASI state in the Store.
+pub struct WasmRuntimeData {
+    pub limits: wasmtime::StoreLimits,
 }
 
 /// WASM runtime manager.
@@ -78,16 +30,58 @@ impl WasmRuntime {
         })
     }
 
-    /// Create a WASI store with memory limits (B3: ResourceLimiter).
+    /// Create a stub runtime for testing without a WASM module.
+    pub fn stub(memory_mb: u64) -> anyhow::Result<Self> {
+        let memory_limit_bytes = memory_mb * 1024 * 1024;
+        let mut config = wasmtime::Config::new();
+        config.consume_fuel(true);
+        let engine = wasmtime::Engine::new(&config)?;
+
+        Ok(Self {
+            engine,
+            memory_limit_bytes,
+        })
+    }
+
+    /// Create a WASI store with memory and fuel limits (B3: ResourceLimiter).
+    ///
+    /// Uses wasmtime's built-in StoreLimits for memory/table caps.
+    /// Fuel limits are enforced via Config::consume_fuel(true) set on the engine.
     pub fn create_store(
         &self,
         _work_dir: &std::path::Path,
-    ) -> Result<wasmtime::Store<wasmtime_wasi::WasiCtx>, wasmtime::Error> {
-        let store =
-            wasmtime::Store::new(&self.engine, wasmtime_wasi::WasiCtxBuilder::new().build());
-        // B3: Resource limits via wasmtime::Store::limiter() in wasmtime 44
-        // Full implementation would use: store.limiter(|ctx| &mut WasmLimits::new(...))
-        // For now, fuel consumption is configured via Config::consume_fuel(true)
+    ) -> Result<wasmtime::Store<(wasmtime_wasi::WasiCtx, WasmRuntimeData)>, wasmtime::Error> {
+        let mut builder = wasmtime_wasi::WasiCtxBuilder::new();
+        builder.inherit_stdio();
+        let wasi_ctx = builder.build();
+
+        let limits = wasmtime::StoreLimitsBuilder::new()
+            .memory_size(self.memory_limit_bytes as usize)
+            .build();
+
+        let data = WasmRuntimeData { limits };
+        let mut store = wasmtime::Store::new(&self.engine, (wasi_ctx, data));
+        store.limiter(|(_, d)| &mut d.limits);
+        Ok(store)
+    }
+
+    /// Create a WASI store with explicit memory cap.
+    pub fn create_store_limited(
+        &self,
+        _work_dir: &std::path::Path,
+        memory_cap: usize,
+    ) -> Result<wasmtime::Store<(wasmtime_wasi::WasiCtx, WasmRuntimeData)>, wasmtime::Error> {
+        let mut builder = wasmtime_wasi::WasiCtxBuilder::new();
+        builder.inherit_stdio();
+        let wasi_ctx = builder.build();
+
+        let limits = wasmtime::StoreLimitsBuilder::new()
+            .memory_size(memory_cap)
+            .build();
+
+        let data = WasmRuntimeData { limits };
+        let mut store = wasmtime::Store::new(&self.engine, (wasi_ctx, data));
+        store.limiter(|(_, d)| &mut d.limits);
         Ok(store)
     }
 

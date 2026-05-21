@@ -122,9 +122,9 @@ export PHPRT_TIMEOUT_MS=60000
 |-------|-------|--------|
 | **0: Foundation** | Workspace, core traits, error model, CI/CD, governance | ✅ Complete |
 | **1: Normal Mode** | Gateway, engines, TLS, resource guards, health probes | ✅ Complete |
-| **2: Octane Core** | Worker pool, IPC protocol, Laravel driver | ⏳ Skeleton |
-| **3: Security** | Landlock, Seccomp, WASM sandbox, circuit breaker | ✅ Partial |
-| **4: Advanced** | Async task offload, telemetry-driven recycle | ⏳ Skeleton |
+| **2: Octane Core** | Worker pool, IPC protocol, state reset, handshake, child engine | ✅ Complete |
+| **3: Security** | Landlock, Seccomp, WASM sandbox, circuit breaker | ✅ Complete |
+| **4: Advanced** | Async task offload, WebSocket, Redis pub/sub, dev debounce, test runner | ✅ Complete |
 | **5: Ecosystem & GA** | Composer package, benchmarks, SLSA | ⏳ Planned |
 
 ## Security

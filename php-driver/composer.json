@@ -1,31 +1,39 @@
 {
-    "name": "nusa-rs/octane-driver",
-    "description": "Rust-powered Octane driver for Laravel",
+    "name": "nusa/octane",
+    "description": "Nusa PHP Runtime driver for Laravel Octane — high-performance, Rust-orchestrated PHP runtime.",
     "type": "library",
     "license": "MIT",
     "authors": [
         {
-            "name": "Nusa Runtime Team"
+            "name": "Nusa Runtime Contributors",
+            "homepage": "https://github.com/nusa-rs/nusa"
         }
     ],
     "require": {
-        "php": "^8.3",
-        "laravel/framework": "^11.0",
-        "laravel/octane": "^2.0"
+        "php": "^8.2",
+        "laravel/octane": "^2.0",
+        "illuminate/http": "^10.0|^11.0",
+        "illuminate/support": "^10.0|^11.0"
     },
     "autoload": {
         "psr-4": {
-            "NusaRs\\OctaneDriver\\": "src/"
+            "Nusa\\Octane\\": "src/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Nusa\\Octane\\NusaOctaneServiceProvider"
+            ]
         }
     },
     "bin": [
         "bin/octane-rust-worker"
     ],
-    "extra": {
-        "laravel": {
-            "providers": [
-                "NusaRs\\OctaneDriver\\OctaneRustServiceProvider"
-            ]
-        }
-    }
+    "config": {
+        "optimize-autoloader": true,
+        "sort-packages": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
 }

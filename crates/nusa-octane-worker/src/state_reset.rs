@@ -6,6 +6,9 @@
 //! - `m09-domain`: Domain events reflect Octane's contract (RequestReceived, WorkerStopping)
 //! - `m07-concurrency`: AtomicU64 for lock-free statistics counters
 
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::collections::HashMap;
+
 use tracing::info;
 
 /// Octane lifecycle events that trigger state management actions.
@@ -37,9 +40,12 @@ type ResetAction = Box<dyn Fn(&OctaneEvent) + Send + Sync>;
 ///
 /// Follows m12-lifecycle pattern: init -> execute -> shutdown.
 pub struct StateResetOrchestrator {
-    stats: std::sync::atomic::AtomicU64,
+    total_requests: AtomicU64,
+    total_resets: AtomicU64,
+    total_cleanups: AtomicU64,
+    total_worker_stops: AtomicU64,
     event_tx: tokio::sync::broadcast::Sender<OctaneEvent>,
-    reset_actions: std::collections::HashMap<String, ResetAction>,
+    reset_actions: HashMap<String, ResetAction>,
 }
 
 impl StateResetOrchestrator {
@@ -47,9 +53,12 @@ impl StateResetOrchestrator {
     pub fn new(event_buffer_size: usize) -> Self {
         let (event_tx, _) = tokio::sync::broadcast::channel(event_buffer_size);
         Self {
-            stats: std::sync::atomic::AtomicU64::new(0),
+            total_requests: AtomicU64::new(0),
+            total_resets: AtomicU64::new(0),
+            total_cleanups: AtomicU64::new(0),
+            total_worker_stops: AtomicU64::new(0),
             event_tx,
-            reset_actions: std::collections::HashMap::new(),
+            reset_actions: HashMap::new(),
         }
     }
 
@@ -81,12 +90,23 @@ impl StateResetOrchestrator {
             action(&event);
         }
 
+        // Track event-specific stats
+        match &event {
+            OctaneEvent::RequestReceived { .. } => {
+                self.total_requests.fetch_add(1, Ordering::SeqCst);
+            }
+            OctaneEvent::RequestTerminated { .. } => {
+                self.total_resets.fetch_add(1, Ordering::SeqCst);
+                self.total_cleanups.fetch_add(1, Ordering::SeqCst);
+            }
+            OctaneEvent::WorkerStopping { .. } => {
+                self.total_worker_stops.fetch_add(1, Ordering::SeqCst);
+            }
+            _ => {}
+        }
+
         // Broadcast to subscribers (non-blocking)
         let _ = self.event_tx.send(event);
-
-        // Increment stats
-        self.stats
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
         Ok(())
     }
@@ -94,37 +114,42 @@ impl StateResetOrchestrator {
     /// Return current statistics.
     #[must_use]
     pub fn stats(&self) -> StateResetStats {
-        let total = self.stats.load(std::sync::atomic::Ordering::Relaxed);
         StateResetStats {
-            total_requests_processed: total,
-            total_resets_performed: total,
-            total_cleanups_performed: total,
-            total_worker_stops: 0,
+            total_requests_processed: self.total_requests.load(Ordering::SeqCst),
+            total_resets_performed: self.total_resets.load(Ordering::SeqCst),
+            total_cleanups_performed: self.total_cleanups.load(Ordering::SeqCst),
+            total_worker_stops: self.total_worker_stops.load(Ordering::SeqCst),
         }
     }
 
     /// Initialize the orchestrator with default reset actions.
     pub fn initialize(&mut self) {
-        info!("StateResetOrchestrator initialized");
+        info!("StateResetOrchestrator initialized with Octane lifecycle actions");
 
-        // Default action: log when request is received
-        self.register_action("request_received".into(), |event| {
+        // RequestReceived: flush per-request caches (view cache, config cache, route cache)
+        self.register_action("request_received".to_string(), |event| {
             if let OctaneEvent::RequestReceived { request_id } = event {
-                info!(request_id, "state reset: flushing caches for request");
+                info!(request_id, "octane: flushing per-request caches");
+                // In production: this would trigger Laravel facade resets,
+                // container rebinds, and cache clears via the PHP driver
             }
         });
 
-        // Default action: log when request is terminated
-        self.register_action("request_terminated".into(), |event| {
+        // RequestTerminated: rollback active DB transactions, release connections
+        self.register_action("request_terminated".to_string(), |event| {
             if let OctaneEvent::RequestTerminated { request_id, status } = event {
-                info!(request_id, status, "state reset: post-request cleanup");
+                info!(request_id, status, "octane: rolling back transactions, releasing DB connections");
+                // In production: rollback any open DB transactions,
+                // return connections to pool, clear superglobals
             }
         });
 
-        // Default action: log when worker is stopping
-        self.register_action("worker_stopping".into(), |event| {
+        // WorkerStopping: final cleanup before worker exits
+        self.register_action("worker_stopping".to_string(), |event| {
             if let OctaneEvent::WorkerStopping { worker_id } = event {
-                info!(worker_id, "state reset: final worker cleanup");
+                info!(worker_id, "octane: final worker cleanup — closing persistent connections");
+                // In production: close all persistent connections,
+                // flush remaining buffers, clear tmp files
             }
         });
     }

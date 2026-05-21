@@ -9,19 +9,15 @@
 use std::path::Path;
 
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
+use tokio::sync::mpsc;
+use tokio::time::Duration;
 use tracing::info;
 
 /// Watched directory patterns for development.
 const WATCH_PATTERNS: &[&str] = &["app", "config", "routes", "resources/views", ".env"];
 
 /// Ignored directories (never watch these).
-const IGNORE_DIRS: &[&str] = &[
-    "vendor",
-    "node_modules",
-    ".git",
-    "storage",
-    "bootstrap/cache",
-];
+const IGNORE_DIRS: &[&str] = &["vendor", "node_modules", ".git", "storage", "bootstrap/cache"];
 
 /// File watcher for hot-reload in development mode.
 ///
@@ -29,9 +25,8 @@ const IGNORE_DIRS: &[&str] = &[
 /// m15-anti-pattern: Debounce window prevents rapid restarts from bulk file operations.
 pub struct DevWatcher {
     watcher: Option<RecommendedWatcher>,
-    #[allow(dead_code)]
-    debounce_ms: u64,
-    pretty: bool,
+    pub debounce_ms: u64,
+    pub pretty: bool,
 }
 
 impl DevWatcher {
@@ -46,11 +41,24 @@ impl DevWatcher {
     /// Start watching configured directories.
     /// m15-anti-pattern: Only watches app-level directories, ignores vendor/node_modules.
     pub fn start(&mut self, app_root: &Path) -> anyhow::Result<()> {
-        let mut watcher = notify::recommended_watcher(|res: Result<Event, _>| {
+        let debounce_ms = self.debounce_ms;
+        let pretty = self.pretty;
+        let app_root_clone = app_root.to_path_buf();
+
+        let (tx, mut rx) = mpsc::unbounded_channel::<Event>();
+
+        // Spawn debounce task
+        tokio::spawn(async move {
+            Self::debounce_loop(&mut rx, debounce_ms, &app_root_clone, pretty).await;
+        });
+
+        let watcher = notify::recommended_watcher(move |res: Result<Event, _>| {
             if let Ok(event) = res {
-                Self::handle_event(&event);
+                let _ = tx.send(event);
             }
         })?;
+
+        let mut watcher = watcher;
 
         for pattern in WATCH_PATTERNS {
             let dir = app_root.join(pattern);
@@ -63,7 +71,7 @@ impl DevWatcher {
         self.watcher = Some(watcher);
 
         if self.pretty {
-            info!("🔥 Nusa dev mode started — watching for changes");
+            info!("Nusa dev mode started — watching for changes");
         } else {
             info!("Nusa dev mode started — watching for changes");
         }
@@ -71,10 +79,50 @@ impl DevWatcher {
         Ok(())
     }
 
-    /// Handle a file change event with appropriate action (m12-lifecycle).
-    fn handle_event(event: &Event) {
-        let _debounce_ms = 200; // Configurable in production
+    /// Debounce loop: batch events within debounce_ms window, then handle.
+    pub async fn debounce_loop(
+        rx: &mut mpsc::UnboundedReceiver<Event>,
+        debounce_ms: u64,
+        app_root: &Path,
+        pretty: bool,
+    ) {
+        use tokio::time::Instant;
 
+        let mut pending_events = Vec::new();
+        let mut deadline: Option<Instant> = None;
+
+        loop {
+            let debounce_dur = Duration::from_millis(debounce_ms);
+            let sleep = if let Some(dead) = deadline {
+                tokio::time::sleep_until(dead)
+            } else {
+                tokio::time::sleep(debounce_dur)
+            };
+
+            tokio::select! {
+                Some(event) = rx.recv() => {
+                    pending_events.push(event);
+                    // Reset deadline on each new event
+                    deadline = Some(Instant::now() + debounce_dur);
+                }
+                _ = async { sleep.await } => {
+                    if pending_events.is_empty() {
+                        continue;
+                    }
+
+                    let events: Vec<Event> = std::mem::take(&mut pending_events);
+                    deadline = None;
+
+                    for event in events {
+                        Self::handle_event(&event, app_root, pretty);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Handle a file change event with appropriate action (m12-lifecycle).
+    pub fn handle_event(event: &Event, _app_root: &Path, _pretty: bool) {
         for path in &event.paths {
             let path_str = path.to_string_lossy();
 
@@ -85,24 +133,17 @@ impl DevWatcher {
 
             if path_str.ends_with(".env") {
                 // .env change → reload config via ArcSwap (no restart needed)
-                info!("📝 .env changed — reloading config (hot)");
+                info!(".env changed — reloading config (hot)");
             } else if path_str.contains("config/") && path_str.ends_with(".php") {
                 // config/*.php change → graceful worker recycle
-                info!("⚙️  Config changed — recycling workers");
+                info!("Config changed — recycling workers");
             } else if path_str.contains("app/") && path_str.ends_with(".php") {
                 // app/**/*.php change → OPcache invalidation + worker recycle
-                info!("🔄 App code changed — invalidating OPcache + recycling");
+                info!("App code changed — invalidating OPcache + recycling");
             } else if path_str.contains("resources/views/") && path_str.ends_with(".blade.php") {
                 // view change → clear view cache
-                info!("🎨 View changed — clearing view cache");
+                info!("View changed — clearing view cache");
             }
         }
-    }
-
-    /// Debounce: collect events within debounce_ms window.
-    #[allow(dead_code)]
-    fn debounce_events(events: &[Event], _debounce_ms: u64) -> Vec<Event> {
-        // In production: use a tokio timer to batch events within the debounce window
-        events.to_vec()
     }
 }

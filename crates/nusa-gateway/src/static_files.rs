@@ -10,7 +10,6 @@ use std::path::{Path, PathBuf};
 
 use axum::{
     body::Body,
-    extract::Request,
     http::{StatusCode, header},
     response::Response,
 };
@@ -57,7 +56,7 @@ impl StaticFileHandler {
     /// Serve a static file with proper headers and cache.
     /// m15-anti-pattern: sanitize_path prevents directory traversal.
     /// m10-performance: async file read + moka cache for hot paths.
-    pub async fn serve(&self, path: &str, request: &Request<Body>) -> Option<Response<Body>> {
+    pub async fn serve(&self, path: &str) -> Option<Response<Body>> {
         let full_path = self.sanitize_path(path)?;
 
         if !full_path.exists() || !full_path.is_file() {
@@ -68,7 +67,7 @@ impl StaticFileHandler {
 
         // m10-performance: Check cache first to avoid disk I/O
         if let Some(cached) = self.cache.get(&cache_key).await {
-            return Some(self.build_response(cached, request));
+            return Some(self.build_response(cached));
         }
 
         // domain-web: async file read for non-blocking I/O
@@ -91,7 +90,7 @@ impl StaticFileHandler {
             self.cache.insert(cache_key, cached.clone()).await;
         }
 
-        Some(self.build_response(cached, request))
+        Some(self.build_response(cached))
     }
 
     /// Sanitize path to prevent directory traversal (m15-anti-pattern).
@@ -107,7 +106,7 @@ impl StaticFileHandler {
         }
     }
 
-    fn build_response(&self, cached: CachedFile, _request: &Request<Body>) -> Response<Body> {
+    fn build_response(&self, cached: CachedFile) -> Response<Body> {
         // domain-web: proper Cache-Control, Content-Type, Content-Length headers
         Response::builder()
             .status(StatusCode::OK)

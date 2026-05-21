@@ -28,3 +28,4 @@ clap.workspace = true
 tracing.workspace = true
 axum.workspace = true
 notify.workspace = true
+parking_lot.workspace = true

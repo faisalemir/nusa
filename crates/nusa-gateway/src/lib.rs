@@ -45,8 +45,11 @@ use nusa_core::{
     BackpressureGuard, PhpEngine, PhpResponse, RequestContext, ResourceGuard, TaskManager,
     TenantRateLimiter, TenantRegistry, with_timeout,
 };
+use nusa_octane_worker::pool::WorkerPool;
+use nusa_octane_worker::state_reset::StateResetOrchestrator;
 use nusa_plugin_api::PluginRegistry;
 use nusa_telemetry::metrics::NusaMetrics;
+use parking_lot::Mutex;
 
 /// Shared application state (all fields Arc-wrapped for Clone + thread-safety).
 #[derive(Clone)]
@@ -65,6 +68,12 @@ pub struct AppState {
     pub sse_manager: Arc<SseManager>,
     pub static_handler: Arc<StaticFileHandler>,
     pub metrics: Arc<NusaMetrics>,
+    pub prometheus_handle: Arc<metrics_exporter_prometheus::PrometheusHandle>,
+    /// Octane worker pool (M2: Octane Core).
+    /// Wrapped in Arc<Mutex> for shared mutable access.
+    pub octane_pool: Arc<Mutex<Option<WorkerPool>>>,
+    /// Octane state reset orchestrator.
+    pub octane_reset: Arc<Mutex<StateResetOrchestrator>>,
 }
 
 /// Main application router with all Blueprint 6 endpoints.
@@ -84,6 +93,9 @@ pub fn app(
     sse_manager: Arc<SseManager>,
     static_handler: Arc<StaticFileHandler>,
     metrics: Arc<NusaMetrics>,
+    prometheus_handle: Arc<metrics_exporter_prometheus::PrometheusHandle>,
+    octane_pool: Arc<Mutex<Option<WorkerPool>>>,
+    octane_reset: Arc<Mutex<StateResetOrchestrator>>,
 ) -> Router {
     let state = AppState {
         engine,
@@ -100,6 +112,9 @@ pub fn app(
         sse_manager,
         static_handler,
         metrics,
+        prometheus_handle,
+        octane_pool,
+        octane_reset,
     };
 
     Router::new()
@@ -120,8 +135,8 @@ pub fn app(
         )
         // Prometheus metrics (A1)
         .route("/metrics", axum::routing::get(metrics_handler))
-        // WebSocket (Blueprint 6 F1) — stub until axum ws feature
-        .route("/ws", axum::routing::get(ws_upgrade_stub_handler))
+        // WebSocket (Blueprint 6 F1)
+        .route("/ws", axum::routing::get(ws_upgrade_handler))
         // SSE (Blueprint 6 F2)
         .route("/sse", axum::routing::get(sse_handler))
         // Task offload (M4)
@@ -133,12 +148,7 @@ pub fn app(
         // Static files (Blueprint 6 E1)
         .route(
             "/static/{*path}",
-            axum::routing::get(|_path: axum::extract::Path<String>| async move {
-                (
-                    StatusCode::NOT_IMPLEMENTED,
-                    "Static file serving not yet implemented",
-                )
-            }),
+            axum::routing::get(static_file_handler),
         )
         // Catch-all route for PHP scripts
         .route("/{*path}", axum::routing::get(handler).post(handler))
@@ -153,21 +163,47 @@ pub fn app(
         .with_state(state)
 }
 
-/// Prometheus metrics endpoint stub (A1).
+/// Prometheus metrics endpoint (A1).
 ///
-/// Status: Stub. Returns placeholder until real Prometheus metrics integration is wired.
-async fn metrics_handler() -> String {
-    "# Nusa runtime metrics (see :9090/metrics for full prometheus export)\n".into()
+/// Returns the full Prometheus exposition format output from the global recorder.
+async fn metrics_handler(State(state): State<AppState>) -> String {
+    state.prometheus_handle.render()
 }
 
-/// WebSocket upgrade stub (Blueprint 6 F1).
+/// WebSocket upgrade handler (Blueprint 6 F1).
 ///
-/// Status: Stub (requires axum `ws` feature for real WebSocket support).
-async fn ws_upgrade_stub_handler() -> (StatusCode, &'static str) {
-    (
-        StatusCode::NOT_IMPLEMENTED,
-        "WebSocket support requires axum 'ws' feature.",
-    )
+/// Extracts tenant_id from headers and generates a unique connection ID.
+async fn ws_upgrade_handler(
+    State(state): State<AppState>,
+    ws: axum::extract::WebSocketUpgrade,
+) -> axum::response::Response {
+    let ws_manager = state.ws_manager.clone();
+    ws.on_upgrade(move |socket| async move {
+        let connection_id = uuid::Uuid::new_v4().to_string();
+        // Extract tenant_id from WebSocket upgrade headers or use default
+        // In production, this would be authenticated and extracted from a token
+        let tenant_id = nusa_core::TenantId::new("default");
+        ws_manager
+            .handle_connection(socket, connection_id, tenant_id)
+            .await;
+    })
+}
+
+/// Static file handler (Blueprint 6 E1).
+///
+/// Routes to StaticFileHandler which serves files with LRU cache,
+/// proper MIME types, Cache-Control headers, and directory traversal prevention.
+async fn static_file_handler(
+    State(state): State<AppState>,
+    axum::extract::Path(path): axum::extract::Path<String>,
+) -> Response<Body> {
+    match state.static_handler.serve(&path).await {
+        Some(resp) => resp,
+        None => Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .body(Body::from("Not Found"))
+            .expect("builder with valid status always succeeds"),
+    }
 }
 
 /// SSE handler route (Blueprint 6 F2).

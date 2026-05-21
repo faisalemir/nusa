@@ -11,6 +11,11 @@ description = "Security hardening: Landlock, Seccomp"
 nusa-core = { path = "../nusa-core" }
 anyhow.workspace = true
 tracing.workspace = true
+libc.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+landlock = "0.4"
+seccompiler = "0.5"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt"] }

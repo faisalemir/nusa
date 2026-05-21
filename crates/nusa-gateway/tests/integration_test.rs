@@ -28,6 +28,7 @@ use nusa_gateway::tenant_circuit_breaker::TenantCircuitBreakers;
 use nusa_gateway::websocket::WsManager;
 use nusa_plugin_api::PluginRegistry;
 use nusa_telemetry::metrics::NusaMetrics;
+use parking_lot::Mutex;
 
 struct OkEngine;
 
@@ -52,6 +53,16 @@ fn build_app() -> Router {
         request_timeout_ms: 5000,
         max_concurrent: 5,
     };
+    let prometheus_handle = Arc::new(
+        metrics_exporter_prometheus::PrometheusBuilder::new()
+            .install_recorder()
+            .expect("prometheus recorder"),
+    );
+    let octane_pool = Arc::new(Mutex::new(None));
+    let mut octane_reset = nusa_octane_worker::state_reset::StateResetOrchestrator::new(128);
+    octane_reset.initialize();
+    let octane_reset = Arc::new(Mutex::new(octane_reset));
+
     app(
         Arc::new(OkEngine),
         Arc::new(PluginRegistry::new()),
@@ -67,6 +78,9 @@ fn build_app() -> Router {
         Arc::new(SseManager::new()),
         Arc::new(StaticFileHandler::new("/tmp".into())),
         Arc::new(NusaMetrics::init()),
+        prometheus_handle,
+        octane_pool,
+        octane_reset,
     )
 }
 
@@ -124,7 +138,7 @@ async fn gateway_all_endpoints_respond() {
         .unwrap();
     assert_eq!(resp.status(), axum::http::StatusCode::OK);
 
-    // WS endpoint (stub)
+    // WS endpoint (requires Upgrade headers, returns 400 without them)
     let resp = app
         .clone()
         .oneshot(
@@ -136,5 +150,5 @@ async fn gateway_all_endpoints_respond() {
         )
         .await
         .unwrap();
-    assert_eq!(resp.status(), axum::http::StatusCode::NOT_IMPLEMENTED);
+    assert_eq!(resp.status(), axum::http::StatusCode::BAD_REQUEST);
 }

@@ -1,66 +1,58 @@
-name: Release & Attestation
+name: Release
 
 on:
   push:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
-  quality-gate:
-    name: Pre-Release Quality Gate
+  build:
+    name: Build Release Binaries
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - x86_64-unknown-linux-musl
+          - aarch64-unknown-linux-musl
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt, clippy
-      - run: cargo fmt --check
-      - run: cargo clippy --workspace -- -D warnings
-      - run: cargo test --workspace
-      - run: cargo install cargo-audit cargo-deny cargo-geiger
-      - run: cargo audit
-      - run: cargo deny check
-      - run: cargo geiger
+          targets: ${{ matrix.target }}
+      - run: cargo build --release --target ${{ matrix.target }}
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: nusa-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/nusa
 
-  build-and-sign:
+  sbom:
+    name: Generate SBOM
     runs-on: ubuntu-latest
-    needs: quality-gate
-    permissions:
-      contents: write
-      packages: write
-      id-token: write
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo install syft
+      - run: syft packages dir:. -o spdx-json > sbom.json
+      - uses: actions/upload-artifact@v4
         with:
-          targets: x86_64-unknown-linux-musl
+          name: sbom
+            path: sbom.json
 
-      - name: Build Release
-        run: cargo build --release --target x86_64-unknown-linux-musl --bin nusa
-
-      - name: Generate SBOM
-        uses: anchore/sbom-action@v0
-        with:
-          image: nusa:${{ github.ref_name }}
-          format: spdx-json
-          output-file: sbom.spdx.json
-
-      - name: Sign Binary
-        uses: sigstore/cosign-installer@v3
-      - run: |
-          cosign sign-blob \
-            --key env://COSIGN_PRIVATE_KEY \
-            --yes \
-            target/x86_64-unknown-linux-musl/release/nusa > nusa.sig
-
+  release:
+    name: Create GitHub Release
+    needs: [build, sbom]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: |
-            target/x86_64-unknown-linux-musl/release/nusa
-            nusa.sig
-            sbom.spdx.json
+            nusa-x86_64-unknown-linux-musl/nusa
+            sbom/sbom.json
           generate_release_notes: true

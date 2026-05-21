@@ -8,20 +8,21 @@
 use std::path::Path;
 use std::process::Stdio;
 
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::process::Command;
 use tracing::info;
 
-// Represents a single PHP child process.
-//
-// m12-lifecycle: Spawn→communicate→shutdown
-// m07-concurrency: tokio::process for async I/O
+/// Represents a single PHP child process.
+///
+/// m12-lifecycle: Spawn→communicate→shutdown
+/// m07-concurrency: tokio::process for async I/O
 pub struct ChildProcess {
     handle: Option<tokio::process::Child>,
     pid: Option<u32>,
 }
 
 impl ChildProcess {
-    // Spawn a new PHP child process.
+    /// Spawn a new PHP child process with piped stdin/stdout/stderr.
     pub async fn spawn(php_binary: &Path, bootstrap_script: &Path) -> std::io::Result<Self> {
         info!(
             "Spawning PHP process: {:?} {:?}",
@@ -47,7 +48,43 @@ impl ChildProcess {
         self.pid
     }
 
-    // Gracefully terminate the child process.
+    /// Write framed IPC data to child's stdin.
+    pub async fn write_stdin(&mut self, data: &[u8]) -> std::io::Result<()> {
+        if let Some(ref mut child) = self.handle
+            && let Some(ref mut stdin) = child.stdin
+        {
+            stdin.write_all(data).await?;
+            stdin.flush().await?;
+        }
+        Ok(())
+    }
+
+    /// Read framed IPC data from child's stdout.
+    ///
+    /// Reads the 4-byte length prefix, then the payload.
+    pub async fn read_stdout(&mut self) -> std::io::Result<Vec<u8>> {
+        if let Some(ref mut child) = self.handle
+            && let Some(ref mut stdout) = child.stdout
+        {
+            // Read 4-byte length prefix
+            let mut header = [0u8; 4];
+            stdout.read_exact(&mut header).await?;
+            let len = u32::from_le_bytes(header) as usize;
+
+            // Read payload
+            let mut payload = vec![0u8; len];
+            stdout.read_exact(&mut payload).await?;
+
+            // Reconstruct framed bytes
+            let mut frame = Vec::with_capacity(4 + len);
+            frame.extend_from_slice(&header);
+            frame.extend_from_slice(&payload);
+            return Ok(frame);
+        }
+        Err(std::io::Error::other("child stdout not available"))
+    }
+
+    /// Gracefully terminate the child process.
     pub async fn shutdown(&mut self) -> std::io::Result<()> {
         if let Some(ref mut child) = self.handle {
             info!("Shutting down PHP process (pid: {:?})", self.pid);

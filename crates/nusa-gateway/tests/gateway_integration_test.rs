@@ -16,6 +16,7 @@ use axum::{
     http::{Request, StatusCode},
 };
 use bytes::Bytes;
+use parking_lot::Mutex;
 use tower::ServiceExt;
 
 use nusa_core::{
@@ -28,6 +29,7 @@ use nusa_gateway::static_files::StaticFileHandler;
 use nusa_gateway::tenant_circuit_breaker::TenantCircuitBreakers;
 use nusa_gateway::websocket::WsManager;
 use nusa_gateway::{app, health::HealthState};
+use nusa_octane_worker::state_reset::StateResetOrchestrator;
 use nusa_plugin_api::PluginRegistry;
 use nusa_telemetry::metrics::NusaMetrics;
 
@@ -65,12 +67,32 @@ impl PhpEngine for FailingMockEngine {
 
 // ── Test Helpers ──
 
+use std::sync::OnceLock;
+
+static PROMETHEUS_HANDLE: OnceLock<Arc<metrics_exporter_prometheus::PrometheusHandle>> = OnceLock::new();
+
+fn get_prometheus_handle() -> Arc<metrics_exporter_prometheus::PrometheusHandle> {
+    PROMETHEUS_HANDLE
+        .get_or_init(|| {
+            // First call succeeds, subsequent calls return the same handle
+            // This avoids the "FailedToSetGlobalRecorder" error in tests
+            Arc::new(
+                metrics_exporter_prometheus::PrometheusBuilder::new()
+                    .install_recorder()
+                    .expect("prometheus recorder"),
+            )
+        })
+        .clone()
+}
+
 fn build_test_app(engine: Arc<dyn PhpEngine>) -> Router {
     let resource_guard = ResourceGuard {
         max_request_bytes: 1024 * 1024,
         request_timeout_ms: 5000,
         max_concurrent: 5,
     };
+
+    let prometheus_handle = get_prometheus_handle();
 
     app(
         engine,
@@ -87,6 +109,13 @@ fn build_test_app(engine: Arc<dyn PhpEngine>) -> Router {
         Arc::new(SseManager::new()),
         Arc::new(StaticFileHandler::new("/app/public".into())),
         Arc::new(NusaMetrics::init()),
+        prometheus_handle.clone(),
+        Arc::new(Mutex::new(None)),
+        Arc::new(Mutex::new({
+            let mut r = StateResetOrchestrator::new(128);
+            r.initialize();
+            r
+        })),
     )
 }
 
@@ -175,6 +204,8 @@ async fn test_circuit_breaker_opens_after_threshold() {
         max_concurrent: 5,
     };
 
+    let prometheus_handle = get_prometheus_handle();
+
     let app = app(
         Arc::new(FailingMockEngine),
         Arc::new(PluginRegistry::new()),
@@ -190,6 +221,13 @@ async fn test_circuit_breaker_opens_after_threshold() {
         Arc::new(SseManager::new()),
         Arc::new(StaticFileHandler::new("/app/public".into())),
         Arc::new(NusaMetrics::init()),
+        prometheus_handle.clone(),
+        Arc::new(Mutex::new(None)),
+        Arc::new(Mutex::new({
+            let mut r = StateResetOrchestrator::new(128);
+            r.initialize();
+            r
+        })),
     );
 
     for _ in 0..2 {
@@ -321,15 +359,16 @@ async fn test_metrics_endpoint_returns_stub() {
 }
 
 #[tokio::test]
-async fn test_ws_endpoint_returns_not_implemented() {
+async fn test_ws_endpoint_requires_upgrade_headers() {
     let app = build_test_app(Arc::new(MockEngine));
+    // WebSocket without upgrade headers should return 400 Bad Request
     let request = Request::builder()
         .uri("/ws")
         .method("GET")
         .body(Body::empty())
         .unwrap();
     let response = app.oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]

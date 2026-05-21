@@ -71,15 +71,40 @@ impl Worker {
         // Connect via IPC
         let transport = IpcTransport::connect(socket_path.to_string_lossy().as_ref()).await?;
 
-        // Send Hello handshake
+        // Send Hello handshake and wait for Ack (Strategy §A.1: version handshake)
         let hello = IpcMessage::Hello {
             version: "1.0".to_string(),
             pid: std::process::id(),
             capabilities: vec!["http".to_string(), "tasks".to_string()],
         };
 
-        // Wait for Ack
         transport.send(hello).await?;
+
+        // Wait for Ack with timeout
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            transport.recv(),
+        ).await {
+            Ok(Ok(IpcMessage::Ack)) => {
+                info!("Worker {} handshake complete", id);
+            }
+            Ok(Ok(other)) => {
+                warn!(
+                    "Worker {} expected Ack, got {:?}",
+                    id,
+                    std::mem::discriminant(&other)
+                );
+                anyhow::bail!("Handshake failed: unexpected response");
+            }
+            Ok(Err(e)) => {
+                warn!("Worker {} handshake read error: {}", id, e);
+                anyhow::bail!("Handshake failed: {e}");
+            }
+            Err(_) => {
+                warn!("Worker {} handshake timeout");
+                anyhow::bail!("Handshake timeout: worker did not respond within 5s");
+            }
+        }
 
         let pid = child.id();
         info!("Worker {} spawned (pid: {:?})", id, pid);
@@ -158,16 +183,22 @@ impl Worker {
 ///
 /// m07-concurrency: Uses JoinSet for managing worker lifecycles.
 /// m12-lifecycle: initialize→route→recycle→shutdown.
+/// m10-performance: Telemetry-driven recycling based on RSS, error rate, GC pause.
 pub struct WorkerPool {
     workers: Vec<Worker>,
     idle_queue: Vec<usize>,
     max_workers: usize,
     app_root: PathBuf,
     max_memory_mb: u64,
-    #[allow(dead_code)]
     max_requests: u64,
+    #[allow(dead_code)]
     total_handled: AtomicU64,
     total_errors: AtomicU64,
+    /// Telemetry-driven recycling thresholds
+    #[allow(dead_code)]
+    rss_threshold_pct: u64,
+    #[allow(dead_code)]
+    error_rate_threshold_pct: u64,
 }
 
 impl WorkerPool {
@@ -186,6 +217,32 @@ impl WorkerPool {
             max_requests,
             total_handled: AtomicU64::new(0),
             total_errors: AtomicU64::new(0),
+            // Default telemetry thresholds
+            rss_threshold_pct: 90,
+            error_rate_threshold_pct: 2,
+        }
+    }
+
+    /// Create a pool with custom telemetry thresholds.
+    pub fn with_telemetry(
+        max_workers: usize,
+        app_root: PathBuf,
+        max_memory_mb: u64,
+        max_requests: u64,
+        rss_threshold_pct: u64,
+        error_rate_threshold_pct: u64,
+    ) -> Self {
+        Self {
+            workers: Vec::with_capacity(max_workers),
+            idle_queue: Vec::new(),
+            max_workers,
+            app_root,
+            max_memory_mb,
+            max_requests,
+            total_handled: AtomicU64::new(0),
+            total_errors: AtomicU64::new(0),
+            rss_threshold_pct,
+            error_rate_threshold_pct,
         }
     }
 

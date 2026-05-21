@@ -101,7 +101,8 @@ async fn handle_subcommand(cmd: Commands) -> anyhow::Result<()> {
 /// Start the Nusa PHP Runtime server.
 async fn start_server(config_path: &str) -> anyhow::Result<()> {
     // 1. Init Telemetry (before any app logic)
-    nusa_telemetry::init()?;
+    let obs = nusa_telemetry::init()?;
+    let prometheus_handle = Arc::new(obs.prometheus_handle);
 
     // 2. Load Config (figment: file → env → defaults)
     nusa_config::load(config_path)?;
@@ -163,7 +164,13 @@ async fn start_server(config_path: &str) -> anyhow::Result<()> {
     // 17. Metrics (A1)
     let metrics = Arc::new(NusaMetrics::init());
 
-    // 18. Blue-Green Deployer (F6)
+    // 18. Octane Worker Pool (M2)
+    let octane_pool = Arc::new(parking_lot::Mutex::new(None));
+    let mut octane_reset = nusa_octane_worker::state_reset::StateResetOrchestrator::new(128);
+    octane_reset.initialize();
+    let octane_reset = Arc::new(parking_lot::Mutex::new(octane_reset));
+
+    // 19. Blue-Green Deployer (F6)
     let _deployer = BlueGreenDeployer::new(nusa_gateway::app(
         engine.clone(),
         plugins.clone(),
@@ -179,9 +186,12 @@ async fn start_server(config_path: &str) -> anyhow::Result<()> {
         sse_manager.clone(),
         static_handler.clone(),
         metrics.clone(),
+        prometheus_handle.clone(),
+        octane_pool.clone(),
+        octane_reset.clone(),
     ));
 
-    // 19. Start Gateway
+    // 20. Start Gateway
     let app = nusa_gateway::app(
         engine.clone(),
         plugins,
@@ -197,6 +207,9 @@ async fn start_server(config_path: &str) -> anyhow::Result<()> {
         sse_manager,
         static_handler,
         metrics,
+        prometheus_handle,
+        octane_pool,
+        octane_reset,
     );
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await?;
 
