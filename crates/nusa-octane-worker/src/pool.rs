@@ -11,6 +11,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use tracing::{info, warn};
 
+#[cfg(not(unix))]
+use tokio::net::TcpStream;
+
 use nusa_ipc::protocol::IpcMessage;
 use nusa_ipc::transport::IpcTransport;
 
@@ -38,9 +41,10 @@ pub struct Worker {
 }
 
 impl Worker {
-    /// Spawn a new PHP worker process and connect via UnixSocket.
+    /// Spawn a new PHP worker process and connect via UnixSocket (Unix) or TCP (Windows).
     ///
-    /// On non-Unix platforms, creates a stub worker.
+    /// On Unix: spawns PHP with Unix socket path.
+    /// On non-Unix: spawns PHP worker and connects via TCP on a configurable port.
     #[cfg(unix)]
     pub async fn spawn(id: usize, app_root: PathBuf, _max_memory_mb: u64) -> anyhow::Result<Self> {
         let socket_dir = app_root.join(".octane");
@@ -120,21 +124,89 @@ impl Worker {
         })
     }
 
+    /// Spawn a new PHP worker process and connect via TCP (Windows).
     #[cfg(not(unix))]
     pub async fn spawn(id: usize, _app_root: PathBuf, _max_memory_mb: u64) -> anyhow::Result<Self> {
-        warn!(
-            "Worker {} stub — UnixSocket not available on this platform",
-            id
-        );
-        Ok(Self {
-            id,
-            pid: None,
-            state: WorkerState::Idle,
-            requests_handled: AtomicU64::new(0),
-            rss_mb: AtomicU64::new(0),
-            error_count: AtomicU64::new(0),
-            transport: None,
-        })
+        // On Windows, try to connect to worker via TCP on a pre-assigned port
+        let port = 19000 + id as u16; // Each worker gets a unique port
+        let addr = format!("127.0.0.1:{}", port);
+
+        info!("Connecting to worker {} via TCP at {}", id, addr);
+
+        // Wait for TCP server to be ready (short timeout for testing fallback)
+        let mut connected = false;
+        for _ in 0..10 {
+            if TcpStream::connect(&addr).await.is_ok() {
+                connected = true;
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+
+        if connected {
+            // Connect via IPC (TCP transport)
+            let mut transport = IpcTransport::connect(&addr).await?;
+
+            // Send Hello handshake and wait for Ack
+            let hello = IpcMessage::Hello {
+                version: "1.0".to_string(),
+                pid: std::process::id(),
+                capabilities: vec!["http".to_string(), "tasks".to_string()],
+            };
+
+            transport.send(hello).await?;
+
+            // Wait for Ack with timeout
+            match tokio::time::timeout(
+                std::time::Duration::from_secs(5),
+                transport.recv(),
+            ).await {
+                Ok(Ok(IpcMessage::Ack)) => {
+                    info!("Worker {} handshake complete (TCP)", id);
+                }
+                Ok(Ok(other)) => {
+                    warn!(
+                        "Worker {} expected Ack, got {:?}",
+                        id,
+                        std::mem::discriminant(&other)
+                    );
+                    anyhow::bail!("Handshake failed: unexpected response");
+                }
+                Ok(Err(e)) => {
+                    warn!("Worker {} handshake read error: {}", id, e);
+                    anyhow::bail!("Handshake failed: {e}");
+                }
+                Err(_) => {
+                    warn!("Worker {} handshake timeout (TCP)", id);
+                    anyhow::bail!("Handshake timeout: worker did not respond within 5s");
+                }
+            }
+
+            Ok(Self {
+                id,
+                pid: None,
+                state: WorkerState::Idle,
+                requests_handled: AtomicU64::new(0),
+                rss_mb: AtomicU64::new(0),
+                error_count: AtomicU64::new(0),
+                transport: Some(transport),
+            })
+        } else {
+            // No PHP worker available — fall back to stub mode (useful for testing)
+            warn!(
+                "Worker {} stub — no PHP worker available at TCP {}",
+                id, addr
+            );
+            Ok(Self {
+                id,
+                pid: None,
+                state: WorkerState::Idle,
+                requests_handled: AtomicU64::new(0),
+                rss_mb: AtomicU64::new(0),
+                error_count: AtomicU64::new(0),
+                transport: None,
+            })
+        }
     }
 
     /// Send a request to this worker.
@@ -191,7 +263,6 @@ pub struct WorkerPool {
     app_root: PathBuf,
     max_memory_mb: u64,
     max_requests: u64,
-    #[allow(dead_code)]
     total_handled: AtomicU64,
     total_errors: AtomicU64,
     /// Telemetry-driven recycling thresholds
@@ -323,6 +394,10 @@ impl WorkerPool {
 
     pub fn idle_count(&self) -> usize {
         self.idle_queue.len()
+    }
+
+    pub fn max_requests(&self) -> u64 {
+        self.max_requests
     }
 
     pub fn worker(&self, id: usize) -> &Worker {

@@ -41,6 +41,23 @@ pub struct RuntimeConfig {
     pub tmp_dir: String,
     /// Enable hot-reload on config file changes.
     pub hot_reload: bool,
+    /// Number of Octane PHP workers (0 = disabled, > 0 = Octane mode).
+    #[serde(default)]
+    pub octane_workers: usize,
+    /// Octane worker max memory in MB before recycling.
+    #[serde(default = "default_max_memory_mb")]
+    pub octane_max_memory_mb: u64,
+    /// Octane worker max requests before recycling.
+    #[serde(default = "default_max_requests")]
+    pub octane_max_requests: u64,
+}
+
+fn default_max_memory_mb() -> u64 {
+    512
+}
+
+fn default_max_requests() -> u64 {
+    1000
 }
 
 /// PHP engine execution kind.
@@ -65,6 +82,9 @@ fn default_config() -> RuntimeConfig {
         code_dir: "/app/public".into(),
         tmp_dir: "/tmp/nusa".into(),
         hot_reload: true,
+        octane_workers: 0, // disabled by default
+        octane_max_memory_mb: 512,
+        octane_max_requests: 1000,
     }
 }
 

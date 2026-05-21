@@ -10,8 +10,22 @@ use std::path::Path;
 
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 use tokio::sync::mpsc;
+use tokio::sync::broadcast;
 use tokio::time::Duration;
 use tracing::info;
+
+/// Action triggered by file change events.
+#[derive(Debug, Clone)]
+pub enum DevAction {
+    /// Reload configuration from file (e.g. .env change).
+    ReloadConfig,
+    /// Recycle worker pool (e.g. config/*.php change).
+    RecycleWorkers,
+    /// Invalidate OPcache and recycle workers (e.g. app code change).
+    InvalidateOpCache,
+    /// Clear view cache (e.g. blade template change).
+    ClearViewCache,
+}
 
 /// Watched directory patterns for development.
 const WATCH_PATTERNS: &[&str] = &["app", "config", "routes", "resources/views", ".env"];
@@ -27,15 +41,24 @@ pub struct DevWatcher {
     watcher: Option<RecommendedWatcher>,
     pub debounce_ms: u64,
     pub pretty: bool,
+    action_tx: broadcast::Sender<DevAction>,
 }
 
 impl DevWatcher {
     pub fn new(debounce_ms: u64, pretty: bool) -> Self {
+        let (action_tx, _) = broadcast::channel(32);
         Self {
             watcher: None,
             debounce_ms,
             pretty,
+            action_tx,
         }
+    }
+
+    /// Subscribe to dev watcher actions.
+    /// Returns a receiver that will get signals when file changes trigger actions.
+    pub fn subscribe(&self) -> broadcast::Receiver<DevAction> {
+        self.action_tx.subscribe()
     }
 
     /// Start watching configured directories.
@@ -44,12 +67,13 @@ impl DevWatcher {
         let debounce_ms = self.debounce_ms;
         let pretty = self.pretty;
         let app_root_clone = app_root.to_path_buf();
+        let action_tx = self.action_tx.clone();
 
         let (tx, mut rx) = mpsc::unbounded_channel::<Event>();
 
         // Spawn debounce task
         tokio::spawn(async move {
-            Self::debounce_loop(&mut rx, debounce_ms, &app_root_clone, pretty).await;
+            Self::debounce_loop(&mut rx, debounce_ms, &app_root_clone, pretty, action_tx).await;
         });
 
         let watcher = notify::recommended_watcher(move |res: Result<Event, _>| {
@@ -85,6 +109,7 @@ impl DevWatcher {
         debounce_ms: u64,
         app_root: &Path,
         pretty: bool,
+        action_tx: broadcast::Sender<DevAction>,
     ) {
         use tokio::time::Instant;
 
@@ -114,7 +139,7 @@ impl DevWatcher {
                     deadline = None;
 
                     for event in events {
-                        Self::handle_event(&event, app_root, pretty);
+                        Self::handle_event(&event, app_root, pretty, &action_tx);
                     }
                 }
             }
@@ -122,7 +147,7 @@ impl DevWatcher {
     }
 
     /// Handle a file change event with appropriate action (m12-lifecycle).
-    pub fn handle_event(event: &Event, _app_root: &Path, _pretty: bool) {
+    pub fn handle_event(event: &Event, _app_root: &Path, _pretty: bool, action_tx: &broadcast::Sender<DevAction>) {
         for path in &event.paths {
             let path_str = path.to_string_lossy();
 
@@ -134,15 +159,19 @@ impl DevWatcher {
             if path_str.ends_with(".env") {
                 // .env change → reload config via ArcSwap (no restart needed)
                 info!(".env changed — reloading config (hot)");
+                let _ = action_tx.send(DevAction::ReloadConfig);
             } else if path_str.contains("config/") && path_str.ends_with(".php") {
                 // config/*.php change → graceful worker recycle
                 info!("Config changed — recycling workers");
+                let _ = action_tx.send(DevAction::RecycleWorkers);
             } else if path_str.contains("app/") && path_str.ends_with(".php") {
                 // app/**/*.php change → OPcache invalidation + worker recycle
                 info!("App code changed — invalidating OPcache + recycling");
+                let _ = action_tx.send(DevAction::InvalidateOpCache);
             } else if path_str.contains("resources/views/") && path_str.ends_with(".blade.php") {
                 // view change → clear view cache
                 info!("View changed — clearing view cache");
+                let _ = action_tx.send(DevAction::ClearViewCache);
             }
         }
     }

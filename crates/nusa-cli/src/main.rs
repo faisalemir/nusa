@@ -165,7 +165,29 @@ async fn start_server(config_path: &str) -> anyhow::Result<()> {
     let metrics = Arc::new(NusaMetrics::init());
 
     // 18. Octane Worker Pool (M2)
-    let octane_pool = Arc::new(parking_lot::Mutex::new(None));
+    // Initialize WorkerPool when octane_workers > 0 (M2: Octane Core)
+    let octane_pool = if cfg.octane_workers > 0 {
+        let app_root = std::path::PathBuf::from(&cfg.code_dir);
+        let mut pool = nusa_octane_worker::pool::WorkerPool::new(
+            cfg.octane_workers,
+            app_root,
+            cfg.octane_max_memory_mb,
+            cfg.octane_max_requests,
+        );
+        match pool.initialize().await {
+            Ok(()) => {
+                tracing::info!("Octane worker pool initialized with {} workers", cfg.octane_workers);
+                Some(pool)
+            }
+            Err(e) => {
+                tracing::warn!("Failed to initialize Octane worker pool: {}", e);
+                None
+            }
+        }
+    } else {
+        None
+    };
+    let octane_pool = Arc::new(parking_lot::Mutex::new(octane_pool));
     let mut octane_reset = nusa_octane_worker::state_reset::StateResetOrchestrator::new(128);
     octane_reset.initialize();
     let octane_reset = Arc::new(parking_lot::Mutex::new(octane_reset));
@@ -207,9 +229,9 @@ async fn start_server(config_path: &str) -> anyhow::Result<()> {
         sse_manager,
         static_handler,
         metrics,
-        prometheus_handle,
-        octane_pool,
-        octane_reset,
+        prometheus_handle.clone(),
+        octane_pool.clone(),
+        octane_reset.clone(),
     );
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await?;
 
@@ -219,9 +241,21 @@ async fn start_server(config_path: &str) -> anyhow::Result<()> {
     tracing::info!("nusa listening on 0.0.0.0:8080");
 
     // 20. Graceful Shutdown (m12-lifecycle)
+    let octane_pool_shutdown = octane_pool.clone();
     let shutdown = async move {
         tokio::signal::ctrl_c().await.ok();
         tracing::info!("nusa shutdown signal received");
+
+        // Shutdown Octane worker pool if active
+        // Extract pool first to avoid holding MutexGuard across await
+        let pool_opt = octane_pool_shutdown
+            .lock()
+            .take();
+
+        if let Some(mut pool) = pool_opt {
+            let _ = pool.shutdown().await;
+        }
+
         engine.shutdown().await;
     };
 

@@ -29,10 +29,11 @@ async fn dev_watcher_debounce_batches_events() {
 
     let debounce_ms = 100;
     let app_root = PathBuf::from("/tmp/test-app");
+    let (action_tx, _) = tokio::sync::broadcast::channel(32);
 
     // Spawn debounce loop
     let handle = tokio::spawn(async move {
-        DevWatcher::debounce_loop(&mut rx, debounce_ms, &app_root, false).await;
+        DevWatcher::debounce_loop(&mut rx, debounce_ms, &app_root, false, action_tx).await;
     });
 
     // Send 5 events rapidly
@@ -63,9 +64,10 @@ async fn dev_watcher_debounce_resets_deadline_on_new_event() {
 
     let debounce_ms = 100;
     let app_root = PathBuf::from("/tmp/test-app");
+    let (action_tx, _) = tokio::sync::broadcast::channel(32);
 
     let handle = tokio::spawn(async move {
-        DevWatcher::debounce_loop(&mut rx, debounce_ms, &app_root, false).await;
+        DevWatcher::debounce_loop(&mut rx, debounce_ms, &app_root, false, action_tx).await;
     });
 
     // Send event 1
@@ -110,8 +112,9 @@ async fn dev_watcher_env_change_detected() {
         attrs: Default::default(),
     };
 
+    let (action_tx, _) = tokio::sync::broadcast::channel(32);
     // Should not panic
-    DevWatcher::handle_event(&event, &PathBuf::from("/app"), false);
+    DevWatcher::handle_event(&event, &PathBuf::from("/app"), false, &action_tx);
 }
 
 #[tokio::test]
@@ -124,7 +127,8 @@ async fn dev_watcher_config_change_detected() {
         attrs: Default::default(),
     };
 
-    DevWatcher::handle_event(&event, &PathBuf::from("/app"), false);
+    let (action_tx, _) = tokio::sync::broadcast::channel(32);
+    DevWatcher::handle_event(&event, &PathBuf::from("/app"), false, &action_tx);
 }
 
 #[tokio::test]
@@ -137,7 +141,8 @@ async fn dev_watcher_app_code_change_detected() {
         attrs: Default::default(),
     };
 
-    DevWatcher::handle_event(&event, &PathBuf::from("/app"), false);
+    let (action_tx, _) = tokio::sync::broadcast::channel(32);
+    DevWatcher::handle_event(&event, &PathBuf::from("/app"), false, &action_tx);
 }
 
 #[tokio::test]
@@ -150,11 +155,13 @@ async fn dev_watcher_view_change_detected() {
         attrs: Default::default(),
     };
 
-    DevWatcher::handle_event(&event, &PathBuf::from("/app"), false);
+    let (action_tx, _) = tokio::sync::broadcast::channel(32);
+    DevWatcher::handle_event(&event, &PathBuf::from("/app"), false, &action_tx);
 }
 
 #[tokio::test]
 async fn dev_watcher_ignored_dirs_skipped() {
+    let (action_tx, _) = tokio::sync::broadcast::channel(32);
     for dir in &["vendor", "node_modules", ".git", "storage", "bootstrap/cache"] {
         let event = Event {
             kind: notify::EventKind::Modify(notify::event::ModifyKind::Data(
@@ -164,7 +171,7 @@ async fn dev_watcher_ignored_dirs_skipped() {
             attrs: Default::default(),
         };
 
-        DevWatcher::handle_event(&event, &PathBuf::from("/app"), false);
+        DevWatcher::handle_event(&event, &PathBuf::from("/app"), false, &action_tx);
     }
 }
 
@@ -182,7 +189,8 @@ async fn dev_watcher_multiple_paths_in_single_event() {
         attrs: Default::default(),
     };
 
-    DevWatcher::handle_event(&event, &PathBuf::from("/app"), false);
+    let (action_tx, _) = tokio::sync::broadcast::channel(32);
+    DevWatcher::handle_event(&event, &PathBuf::from("/app"), false, &action_tx);
 }
 
 #[tokio::test]
@@ -195,8 +203,9 @@ async fn dev_watcher_non_php_config_file_ignored() {
         attrs: Default::default(),
     };
 
+    let (action_tx, _) = tokio::sync::broadcast::channel(32);
     // Should not panic, but should not trigger config recycle
-    DevWatcher::handle_event(&event, &PathBuf::from("/app"), false);
+    DevWatcher::handle_event(&event, &PathBuf::from("/app"), false, &action_tx);
 }
 
 #[tokio::test]
@@ -209,5 +218,6 @@ async fn dev_watcher_non_blade_view_ignored() {
         attrs: Default::default(),
     };
 
-    DevWatcher::handle_event(&event, &PathBuf::from("/app"), false);
+    let (action_tx, _) = tokio::sync::broadcast::channel(32);
+    DevWatcher::handle_event(&event, &PathBuf::from("/app"), false, &action_tx);
 }

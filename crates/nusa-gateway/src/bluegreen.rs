@@ -28,6 +28,7 @@ pub struct DeploymentSlot {
 pub struct BlueGreenDeployer {
     active: ArcSwap<DeploymentSlot>,
     standby: ArcSwap<Option<DeploymentSlot>>,
+    previous: ArcSwap<Option<DeploymentSlot>>,
 }
 
 impl BlueGreenDeployer {
@@ -41,6 +42,7 @@ impl BlueGreenDeployer {
         Self {
             active: ArcSwap::from_pointee(active),
             standby: ArcSwap::from_pointee(None),
+            previous: ArcSwap::from_pointee(None),
         }
     }
 
@@ -70,12 +72,20 @@ impl BlueGreenDeployer {
     pub fn switch(&self) {
         let standby = self.standby.load();
         if let Some(standby_slot) = standby.as_ref() {
+            let old_active = self.active.load();
+            // Save old active as previous for potential rollback
+            self.previous.store(Arc::new(Some(DeploymentSlot {
+                name: old_active.name.clone(),
+                router: old_active.router.clone(),
+                healthy: old_active.healthy,
+            })));
+
             let new_active = DeploymentSlot {
                 name: standby_slot.name.clone(),
                 router: standby_slot.router.clone(),
                 healthy: true,
             };
-            let old_active = self.active.swap(Arc::new(new_active));
+            self.active.swap(Arc::new(new_active));
             info!(
                 "Switched deployment: {} -> {}",
                 old_active.name,
@@ -91,14 +101,53 @@ impl BlueGreenDeployer {
     }
 
     /// Rollback to previous deployment (m12-lifecycle: recovery phase).
+    /// Swaps the current active slot back to previous and preserves standby.
     pub fn rollback(&self) {
-        info!("Rolling back deployment");
-        // In production: swap back to the previous slot
+        let previous = self.previous.load();
+        if let Some(prev_slot) = previous.as_ref() {
+            let old_active = self.active.load();
+            // Only move current active to standby if standby is empty or different
+            let current_standby = self.standby.load();
+            let should_update_standby = current_standby.as_ref().is_none()
+                || current_standby.as_ref().as_ref().map(|s| &s.name) != Some(&old_active.name);
+
+            if should_update_standby {
+                self.standby.store(Arc::new(Some(DeploymentSlot {
+                    name: old_active.name.clone(),
+                    router: old_active.router.clone(),
+                    healthy: false,
+                })));
+            }
+            // Restore previous as active
+            let restored = DeploymentSlot {
+                name: prev_slot.name.clone(),
+                router: prev_slot.router.clone(),
+                healthy: prev_slot.healthy,
+            };
+            self.active.swap(Arc::new(restored));
+            info!(
+                "Rolled back deployment: {} -> {}",
+                old_active.name,
+                self.active.load().name
+            );
+        } else {
+            info!("No previous deployment available for rollback");
+        }
     }
 
     /// Drain the standby slot (m12-lifecycle: final cleanup phase).
     pub fn drain_standby(&self) {
         self.standby.store(Arc::new(None));
         info!("Standby slot drained");
+    }
+
+    /// Get the current active slot (for testing/debugging).
+    pub fn active(&self) -> arc_swap::Guard<Arc<DeploymentSlot>> {
+        self.active.load()
+    }
+
+    /// Get the current standby slot (for testing/debugging).
+    pub fn standby(&self) -> arc_swap::Guard<Arc<Option<DeploymentSlot>>> {
+        self.standby.load()
     }
 }
