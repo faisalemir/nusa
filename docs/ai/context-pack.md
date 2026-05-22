@@ -16,7 +16,7 @@ Single-page facts for Nusa PHP Runtime. Updated for documentation rewrite; verif
 | **Normal** | `octane_workers = 0`, `engine = child` (default) | Per-request PHP via `PhpEngine` |
 | **Octane** | `octane_workers > 0` | Long-lived Laravel workers via IPC (`WorkerPool`) |
 
-**Implementation note (v0.1.0):** CLI initializes `WorkerPool` when `octane_workers > 0`, but the gateway **catch-all handler still uses `state.engine.execute` only**. Octane dispatch in HTTP is **not complete** until gateway routes to the pool.
+**Implementation note (v0.1.0):** When `octane_workers > 0` and the pool is ready, the gateway routes HTTP to `WorkerPool::handle_http_request` with IPC body/headers and state-reset events. Normal mode (`octane_workers = 0`) still uses `PhpEngine::execute`. Validate with `just podman-test-laravel` / `just podman-ci-e2e`.
 
 ## Milestones (blueprint)
 
@@ -40,6 +40,8 @@ See [`docs/public/production-status.md`](../public/production-status.md) for an 
 | Host tests (dev) | `just test-fast` |
 | **Pre-merge CI** | **`just podman-ci`** |
 | Full Alpine tests | `just podman-test-full` |
+| Laravel + leak + bench (P2) | `just podman-ci-e2e` |
+| Laravel E2E only | `just podman-test-laravel` |
 | Single crate test | `just test-crate gateway` |
 | Security | `just security` |
 | API docs | `just docs` |

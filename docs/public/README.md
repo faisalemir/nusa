@@ -1,75 +1,107 @@
-# Nusa — public documentation
+# Nusa documentation for Laravel developers
 
-**Nusa PHP Runtime** is not another PHP-FPM wrapper. It is a deliberate re-architecture of how Laravel meets the network: a **memory-safe Rust control plane** that owns TLS, routing, backpressure, tenancy, observability, and kernel-level sandboxing—while PHP remains the language of your application logic.
+**Nusa** runs your Laravel application behind a single `nusa` process: HTTP, health checks, metrics, rate limits, and (optionally) long-lived **Octane-style workers**—without maintaining nginx + php-fpm + Supervisor as separate products.
 
-Where traditional stacks bolt a web server onto PHP and hope for the best, Nusa inverts the relationship. Rust sits at the edge because that is where concurrency, security policy, and operational truth belong. PHP executes inside a governed boundary you configure once and enforce everywhere.
+You keep writing **routes, controllers, Eloquent, and Composer packages** in PHP. Nusa handles the platform edge in Rust.
 
-> *Rust orchestrates. Laravel performs. The platform protects both.*
+> **Audience:** Laravel developers and tech leads shipping Laravel to production.  
+> **Rust contributors:** see [contributor documentation](../contributor/README.md).
 
-This documentation is for **operators, platform engineers, and Laravel teams** who will run Nusa in production—not for Rust contributors (see [contributor docs](../contributor/)).
-
----
-
-## Why teams choose this architecture
-
-### One runtime, two performance personalities
-
-Nusa is designed around a single gateway with **two execution philosophies**, switchable by configuration:
-
-| Mode | Philosophy | Best for |
-|------|------------|----------|
-| **Normal** | FPM-compatible isolation—bootstrap per request through a governed `PhpEngine` | Migrations from nginx/php-fpm, predictable cold paths, maximum isolation |
-| **Octane** | Long-lived Laravel workers over a framed **IPC contract**—bootstrap once, serve many | Throughput, warm caches, Octane-style latency (full HTTP dispatch completing in P1) |
-
-You do not maintain two products. You tune `nusa.toml` and let the runtime adapt.
-
-### Security is not a PHP ini setting
-
-Before the gateway accepts traffic, Nusa applies **Landlock** filesystem rules and **seccomp-BPF** syscall filtering from Rust. That means your Laravel app cannot silently widen the attack surface through a misconfigured `open_basedir` or a forgotten upload path. Policy is enforced at the kernel boundary, with tests that **fail closed** on Linux CI—not skipped with a friendly log line.
-
-### Built for multi-tenant SaaS from day one
-
-The gateway understands **tenant identity** from headers and hostnames, applies **per-tenant rate limits** and **per-tenant circuit breakers**, and routes observability context through **W3C TraceContext**. You get platform primitives that usually require a service mesh sidecar—embedded in the same binary that serves HTTP.
-
-### Observable by construction
-
-Prometheus metrics, structured JSON logs, health and readiness probes, WebSocket and SSE endpoints, and async task offload APIs are first-class routes—not afterthoughts. Nusa treats operability as a feature equal to request handling.
-
-### Cloud-native without framework lock-in
-
-Hot-reload configuration via `ArcSwap`, Alpine **musl** as the production target, container-first CI (`just podman-ci`), and optional ACME/TLS/QUIC modules in the gateway crate map to how modern platforms actually ship software: immutable images, declarative config, measurable SLOs.
+**Release:** v0.1.0 (pre-GA). Read [Production status](production-status.md) before production cutover.
 
 ---
 
-## Documentation map
+## Start here (pick your path)
 
-| Document | What you will learn |
-|----------|---------------------|
-| [Getting started](getting-started.md) | Build, configure, and feel the runtime in minutes |
-| [Configuration](configuration.md) | Every `nusa.toml` key—and *why* it exists |
-| [Production status](production-status.md) | Transparent maturity: what is production-grade today vs next |
-| [Migration](migration.md) | Leaving FPM, RoadRunner, or FrankenPHP without surprises |
-| [Operations runbook](operations/runbook.md) | How SRE teams run Nusa under load and incident stress |
-| [PHP ecosystem](ecosystem/package-guidelines.md) | How Composer and the Octane worker bridge into Rust |
+| I want to… | Read this | Time |
+|------------|-----------|------|
+| Run Nusa locally in minutes | [Quick start](quick-start.md) | ~10 min |
+| Understand install + layout | [Laravel guide → Installation](laravel/installation.md) | ~20 min |
+| Use Octane / persistent workers | [Laravel guide → Octane mode](laravel/octane-mode.md) | ~25 min |
+| Tune `nusa.toml` for my app | [Configuration](configuration.md) + [Laravel configuration](laravel/configuration-for-laravel.md) | reference |
+| Move from FPM or RoadRunner | [Migration](migration.md) | ~30 min |
+| Fix errors / 503 / permissions | [Troubleshooting](laravel/troubleshooting.md) | when needed |
+
+**Recommended first visit:** [Quick start](quick-start.md) → [Laravel documentation hub](laravel/README.md).
+
+---
+
+## Laravel documentation (main guide)
+
+Structured guides written for day-to-day Laravel work:
+
+| Guide | Topics |
+|-------|--------|
+| [Laravel hub](laravel/README.md) | Index and learning paths |
+| [Installation](laravel/installation.md) | PHP, Composer, `nusa` binary, paths |
+| [Run your existing app](laravel/first-app.md) | `code_dir`, first request, probes |
+| [Configuration for Laravel](laravel/configuration-for-laravel.md) | `code_dir`, `storage/`, Octane knobs |
+| [Normal mode (FPM-like)](laravel/normal-mode.md) | `octane_workers = 0`, when to use it |
+| [Octane mode](laravel/octane-mode.md) | Workers, driver, IPC, readiness |
+| [PHP driver package](laravel/php-driver.md) | Composer, `octane-rust-worker` |
+| [HTTP, routes, headers](laravel/routes-http-and-headers.md) | GET/POST, query strings, tracing |
+| [Local development](laravel/local-development.md) | `nusa dev`, hot reload |
+| [Deploy checklist](laravel/deployment-checklist.md) | Staging → production |
+| [Troubleshooting](laravel/troubleshooting.md) | Common Laravel + Nusa issues |
+| [FAQ](laravel/faq.md) | Short answers |
+
+---
+
+## Platform reference (all audiences)
+
+| Document | Purpose |
+|----------|---------|
+| [Configuration reference](configuration.md) | Every `nusa.toml` key |
+| [Production status](production-status.md) | What is production-grade today |
+| [Compatibility matrix](compatibility-matrix.md) | PHP, Laravel, OS versions |
+| [Migration](migration.md) | From FPM, RoadRunner, FrankenPHP |
+| [Operations runbook](operations/runbook.md) | SRE: incidents, scaling, probes |
+| [PHP ecosystem](ecosystem/package-guidelines.md) | Package layout (contributor-oriented detail) |
+
+---
+
+## How Nusa fits your Laravel app
+
+```text
+  Browser / API client
+           │
+           ▼
+  ┌──────────────────────────────┐
+  │  nusa (gateway)              │
+  │  /health  /ready  /metrics │
+  └──────────────┬───────────────┘
+                 │
+       ┌─────────┴──────────┐
+       ▼                    ▼
+  Normal mode           Octane mode
+  (octane_workers = 0)  (octane_workers > 0)
+  One PHP per request   Laravel workers + IPC
+       │                    │
+       ▼                    ▼
+  Your Laravel app      Same app, warm bootstrap
+```
+
+| Mode | Config | Feels like |
+|------|--------|------------|
+| **Normal** | `octane_workers = 0` | php-fpm: fresh request scope, maximum isolation |
+| **Octane** | `octane_workers = 4` (example) | Laravel Octane / RoadRunner: workers stay up |
 
 ---
 
 ## Security and compliance
 
-- [Threat model](../security/threat-model.md) — how we think about IPC, VFS escape, and supply chain
-- [Compliance](../security/compliance.md) — evidence-oriented mapping for regulated environments
-- [SECURITY.md](../../SECURITY.md) — responsible disclosure
+- [Threat model](../security/threat-model.md)
+- [Compliance](../security/compliance.md)
+- [SECURITY.md](../../SECURITY.md)
 
 ---
 
-## Version honesty (read this once)
+## Version honesty
 
-The workspace ships **v0.1.0 (pre-GA)**. The **ideas and most subsystems are real**—gateway, engines, sandbox, IPC, worker pool, extensive tests—but we document gaps openly (for example, Octane HTTP dispatch through the pool is the active P1 milestone).
-
-We would rather earn your trust with precision than lose it with marketing adjectives. [Production status](production-status.md) is the single source of truth for “can I bet my company on this today?”
+We document **gaps and maturity** openly in [Production status](production-status.md). Pre-GA means: validate on **Alpine Linux** staging that mirrors production before you bet revenue traffic on new config.
 
 ---
 
 ## Next step
 
-Start with **[Getting started](getting-started.md)**—then read **[Production status](production-status.md)** before you point staging traffic at Nusa.
+Open **[Quick start](quick-start.md)** or the **[Laravel hub](laravel/README.md)**.

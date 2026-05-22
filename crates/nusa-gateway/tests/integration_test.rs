@@ -58,7 +58,7 @@ fn build_app() -> Router {
             .install_recorder()
             .expect("prometheus recorder"),
     );
-    let octane_pool = Arc::new(Mutex::new(None));
+    let octane_pool = Arc::new(tokio::sync::Mutex::new(None));
     let mut octane_reset = nusa_octane_worker::state_reset::StateResetOrchestrator::new(128);
     octane_reset.initialize();
     let octane_reset = Arc::new(Mutex::new(octane_reset));

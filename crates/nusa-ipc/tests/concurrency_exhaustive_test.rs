@@ -277,6 +277,7 @@ async fn ipctransport_request_response_timeout_cleanup_verified() {
             "GET".to_string(),
             "/test".to_string(),
             Default::default(),
+            None,
             100, // 100ms timeout
         ),
     )

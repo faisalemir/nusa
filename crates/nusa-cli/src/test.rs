@@ -68,13 +68,9 @@ impl TestRunner {
 
     /// Run tests through the persistent pool (domain-cli).
     pub async fn run_tests(&mut self) -> anyhow::Result<TestResult> {
-        if self.pool.is_none() {
-            self.initialize().await?;
-        }
-
         info!("Running tests from {:?}", self.config.test_path);
 
-        // Enumerate test files in the test path
+        // Enumerate before pool init — empty dirs must not require PHP workers (domain-cli).
         let test_files = self.enumerate_test_files();
         let total = test_files.len();
 
@@ -85,6 +81,10 @@ impl TestRunner {
                 passed: 0,
                 failed: 0,
             });
+        }
+
+        if self.pool.is_none() {
+            self.initialize().await?;
         }
 
         info!("Found {} test files", total);
@@ -113,7 +113,7 @@ impl TestRunner {
                     let idx = pool.idle_count() - 1;
                     match pool
                         .worker_mut(idx)
-                        .handle_request(method, uri, 30000)
+                        .handle_request(method, uri, Default::default(), None, 30000)
                         .await
                     {
                         Ok(_response) => {

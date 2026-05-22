@@ -23,30 +23,51 @@ fn test_app_root() -> PathBuf {
     dir
 }
 
+/// Stub worker for unit tests without PHP (live path: `podman-test-laravel`).
+fn test_stub_worker(id: usize) -> Worker {
+    Worker::new_test_stub(id)
+}
+
 // ── Worker Lifecycle Tests ──
 
+#[cfg(not(unix))]
 #[tokio::test]
 async fn worker_spawn_creates_stub_on_non_unix() {
-    // On Windows, Worker::spawn returns a stub worker
-    let result = Worker::spawn(0, test_app_root(), 512).await;
-
-    assert!(
-        result.is_ok(),
-        "Worker stub creation must succeed on non-Unix"
-    );
-    let worker = result.unwrap();
+    let worker = Worker::spawn(0, test_app_root(), 512)
+        .await
+        .expect("Windows stub spawn");
     assert_eq!(worker.id, 0);
     assert_eq!(worker.state, WorkerState::Idle);
     assert_eq!(worker.requests_handled.load(Ordering::SeqCst), 0);
     assert_eq!(worker.rss_mb.load(Ordering::SeqCst), 0);
 }
 
+#[cfg(unix)]
+#[tokio::test]
+async fn worker_spawn_fails_closed_without_php_driver() {
+    let result = Worker::spawn(0, test_app_root(), 512).await;
+    let Err(err) = result else {
+        panic!("Unix spawn without php-driver must fail");
+    };
+    let msg = err.to_string();
+    assert!(
+        msg.contains("octane") || msg.contains("Handshake") || msg.contains("missing"),
+        "unexpected error: {msg}"
+    );
+}
+
 #[tokio::test]
 async fn worker_handle_request_fails_on_stub() {
-    let mut worker = Worker::spawn(0, test_app_root(), 512).await.unwrap();
+    let mut worker = test_stub_worker(0);
 
     let result = worker
-        .handle_request("GET".into(), "/index.php".into(), 5000)
+        .handle_request(
+            "GET".into(),
+            "/index.php".into(),
+            Default::default(),
+            None,
+            5000,
+        )
         .await;
 
     assert!(
@@ -63,7 +84,7 @@ async fn worker_handle_request_fails_on_stub() {
 
 #[tokio::test]
 async fn worker_stop_transitions_to_stopped() {
-    let mut worker = Worker::spawn(0, test_app_root(), 512).await.unwrap();
+    let mut worker = test_stub_worker(0);
 
     assert_eq!(worker.state, WorkerState::Idle);
 
@@ -78,7 +99,7 @@ async fn worker_stop_transitions_to_stopped() {
 
 #[tokio::test]
 async fn worker_should_recycle_by_requests() {
-    let worker = Worker::spawn(0, test_app_root(), 512).await.unwrap();
+    let worker = test_stub_worker(0);
 
     // Set request count manually
     worker.requests_handled.store(1000, Ordering::SeqCst);
@@ -95,7 +116,7 @@ async fn worker_should_recycle_by_requests() {
 
 #[tokio::test]
 async fn worker_should_recycle_by_memory() {
-    let worker = Worker::spawn(0, test_app_root(), 512).await.unwrap();
+    let worker = test_stub_worker(0);
 
     worker.rss_mb.store(800, Ordering::SeqCst);
 
@@ -111,7 +132,7 @@ async fn worker_should_recycle_by_memory() {
 
 #[tokio::test]
 async fn worker_atomic_counters_are_thread_safe() {
-    let worker = Arc::new(Worker::spawn(0, test_app_root(), 512).await.unwrap());
+    let worker = Arc::new(test_stub_worker(0));
 
     // Simulate concurrent counter increments
     let mut handles = vec![];
@@ -137,20 +158,41 @@ async fn worker_atomic_counters_are_thread_safe() {
 
 // ── Worker Pool Tests ──
 
+#[test]
+fn pool_is_ready_false_for_test_stubs() {
+    let mut pool = WorkerPool::new(2, test_app_root(), 512, 1000);
+    pool.initialize_test_stubs();
+    assert!(!pool.is_ready());
+    assert_eq!(pool.idle_count(), 2);
+}
+
+#[tokio::test]
+async fn pool_handle_http_request_fails_when_not_ready() {
+    let mut pool = WorkerPool::new(1, test_app_root(), 512, 1000);
+    pool.initialize_test_stubs();
+    let result = pool
+        .handle_http_request("GET".into(), "/".into(), Default::default(), None, 5000)
+        .await;
+    assert!(result.is_err());
+}
+
 #[tokio::test]
 async fn pool_initialization_creates_workers() {
     let mut pool = WorkerPool::new(3, test_app_root(), 512, 1000);
 
-    let result = pool.initialize().await;
-    assert!(result.is_ok(), "Pool initialization must succeed");
+    pool.initialize_test_stubs();
     assert_eq!(pool.idle_count(), 3, "Pool must have 3 idle workers");
+    assert!(
+        !pool.is_ready(),
+        "test stubs must not report production-ready"
+    );
 }
 
 #[tokio::test]
 async fn pool_get_idle_worker_dequeues() {
     let mut pool = WorkerPool::new(2, test_app_root(), 512, 1000);
 
-    pool.initialize().await.unwrap();
+    pool.initialize_test_stubs();
 
     // Get first idle worker
     let worker1 = pool.get_idle_worker();
@@ -171,7 +213,7 @@ async fn pool_get_idle_worker_dequeues() {
 async fn pool_return_worker_enqueues() {
     let mut pool = WorkerPool::new(2, test_app_root(), 512, 1000);
 
-    pool.initialize().await.unwrap();
+    pool.initialize_test_stubs();
 
     // Get both workers
     pool.get_idle_worker();
@@ -196,7 +238,7 @@ async fn pool_return_worker_enqueues() {
 async fn pool_recycle_worker_replaces() {
     let mut pool = WorkerPool::new(1, test_app_root(), 512, 1000);
 
-    pool.initialize().await.unwrap();
+    pool.initialize_test_stubs();
     assert_eq!(pool.idle_count(), 1);
 
     // Get the only worker
@@ -218,7 +260,7 @@ async fn pool_recycle_worker_replaces() {
 async fn pool_shutdown_clears_all() {
     let mut pool = WorkerPool::new(3, test_app_root(), 512, 1000);
 
-    pool.initialize().await.unwrap();
+    pool.initialize_test_stubs();
     assert_eq!(pool.worker_count(), 3);
 
     let result = pool.shutdown().await;
@@ -239,7 +281,7 @@ async fn pool_shutdown_clears_all() {
 async fn pool_statistics_tracking() {
     let mut pool = WorkerPool::new(2, test_app_root(), 512, 1000);
 
-    pool.initialize().await.unwrap();
+    pool.initialize_test_stubs();
 
     // Simulate work
     pool.worker_mut(0)
@@ -340,7 +382,7 @@ async fn orchestrator_shutdown() {
 
 #[tokio::test]
 async fn worker_with_zero_max_requests_recycles_immediately() {
-    let worker = Worker::spawn(0, test_app_root(), 512).await.unwrap();
+    let worker = test_stub_worker(0);
 
     // Zero requests handled, but max_requests is 0
     assert!(
@@ -351,7 +393,7 @@ async fn worker_with_zero_max_requests_recycles_immediately() {
 
 #[tokio::test]
 async fn worker_with_zero_max_memory_recycles_immediately() {
-    let worker = Worker::spawn(0, test_app_root(), 512).await.unwrap();
+    let worker = test_stub_worker(0);
 
     // Zero RSS, but max_memory is 0
     assert!(
@@ -372,11 +414,17 @@ async fn pool_with_zero_workers_initializes_empty() {
 
 #[tokio::test]
 async fn worker_request_timeout_behavior() {
-    let mut worker = Worker::spawn(0, test_app_root(), 512).await.unwrap();
+    let mut worker = test_stub_worker(0);
 
     // Very short timeout on stub worker
     let result = worker
-        .handle_request("GET".into(), "/index.php".into(), 1) // 1ms timeout
+        .handle_request(
+            "GET".into(),
+            "/index.php".into(),
+            Default::default(),
+            None,
+            1,
+        )
         .await;
 
     assert!(result.is_err(), "Request must fail (stub mode or timeout)",);
@@ -386,7 +434,7 @@ async fn worker_request_timeout_behavior() {
 async fn pool_recycle_preserves_worker_id() {
     let mut pool = WorkerPool::new(2, test_app_root(), 512, 1000);
 
-    pool.initialize().await.unwrap();
+    pool.initialize_test_stubs();
 
     // Recycle worker 1
     pool.recycle_worker(1).await.unwrap();
@@ -402,7 +450,7 @@ async fn pool_recycle_preserves_worker_id() {
 async fn pool_multiple_recycles_succeed() {
     let mut pool = WorkerPool::new(3, test_app_root(), 512, 1000);
 
-    pool.initialize().await.unwrap();
+    pool.initialize_test_stubs();
 
     // Recycle all workers sequentially
     for i in 0..pool.worker_count() {

@@ -18,6 +18,11 @@ use tracing::{info, warn};
 #[cfg(unix)]
 use std::process::Command;
 
+use std::collections::HashMap;
+
+use bytes::Bytes;
+use nusa_core::PhpResponse;
+
 use crate::error::WorkerError;
 use nusa_ipc::protocol::IpcMessage;
 use nusa_ipc::transport::IpcTransport;
@@ -163,6 +168,20 @@ impl Worker {
         }
     }
 
+    /// Worker with a connected IPC transport (fake PHP server in tests).
+    #[doc(hidden)]
+    pub fn new_test_with_transport(id: usize, transport: IpcTransport) -> Self {
+        Self {
+            id,
+            pid: None,
+            state: WorkerState::Idle,
+            requests_handled: AtomicU64::new(0),
+            rss_mb: AtomicU64::new(0),
+            error_count: AtomicU64::new(0),
+            transport: Some(transport),
+        }
+    }
+
     /// Spawn a new PHP worker process and connect via UnixSocket (Unix) or TCP (Windows).
     ///
     /// On Unix: spawns PHP with Unix socket path.
@@ -180,34 +199,33 @@ impl Worker {
             )));
         }
 
-        let socket_dir = app_root.join(".octane");
+        // Default under temp (per PID) — avoids Windows bind-mount socket failures and parallel test clashes.
+        let socket_dir = std::env::var("NUSA_OCTANE_SOCKET_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| {
+                std::env::temp_dir().join(format!("nusa-octane-{}", std::process::id()))
+            });
         tokio::fs::create_dir_all(&socket_dir).await?;
         let socket_path = socket_dir.join(format!("worker-{}.sock", id));
         let worker_script = app_root.join("php-driver/bin/octane-rust-worker");
 
         if !worker_script.exists() {
-            warn!(
-                "Worker {} stub — Octane worker script missing at {}",
-                id,
+            return Err(WorkerError::Handshake(format!(
+                "octane worker script missing at {}",
                 worker_script.display()
-            );
-            return Ok(Self::new_test_stub(id));
+            )));
         }
 
-        let mut child = match Command::new("php")
+        let mut child = Command::new("php")
             .args([
                 worker_script.to_string_lossy().as_ref(),
                 socket_path.to_string_lossy().as_ref(),
             ])
             .current_dir(&app_root)
             .spawn()
-        {
-            Ok(c) => c,
-            Err(e) => {
-                warn!("Worker {id} stub — could not spawn PHP: {e}");
-                return Ok(Self::new_test_stub(id));
-            }
-        };
+            .map_err(|e| {
+                WorkerError::Handshake(format!("worker {id}: could not spawn PHP: {e}"))
+            })?;
 
         let ready = async {
             wait_for_worker_socket(&socket_path).await?;
@@ -233,8 +251,9 @@ impl Worker {
             }
             Err(e) => {
                 let _ = child.kill();
-                warn!("Worker {id} stub — Octane worker unavailable: {e}");
-                Ok(Self::new_test_stub(id))
+                Err(WorkerError::Handshake(format!(
+                    "worker {id}: octane worker unavailable: {e}"
+                )))
             }
         }
     }
@@ -289,17 +308,24 @@ impl Worker {
         })
     }
 
+    /// Returns true when this worker has a live IPC transport (not a test stub).
+    pub fn has_transport(&self) -> bool {
+        self.transport.is_some()
+    }
+
     /// Send a request to this worker.
     pub async fn handle_request(
         &mut self,
         method: String,
         uri: String,
+        headers: HashMap<String, Vec<String>>,
+        body: Option<Vec<u8>>,
         timeout_ms: u64,
     ) -> Result<IpcMessage, WorkerError> {
         if let Some(ref mut transport) = self.transport {
             self.state = WorkerState::Busy;
             let result = transport
-                .request_response(method, uri, Default::default(), timeout_ms)
+                .request_response(method, uri, headers, body, timeout_ms)
                 .await;
             if result.is_ok() {
                 self.requests_handled.fetch_add(1, Ordering::SeqCst);
@@ -405,8 +431,81 @@ impl WorkerPool {
             self.workers.push(worker);
         }
 
+        if self.max_workers > 0 && !self.is_ready() {
+            return Err(WorkerError::Handshake(
+                "octane pool not ready: no worker has IPC transport (PHP worker missing or failed)"
+                    .into(),
+            ));
+        }
+
         info!("Worker pool initialized");
         Ok(())
+    }
+
+    /// True when the pool is configured and every worker has IPC transport.
+    pub fn is_ready(&self) -> bool {
+        if self.max_workers == 0 {
+            return true;
+        }
+        self.workers.len() == self.max_workers && self.workers.iter().all(Worker::has_transport)
+    }
+
+    /// True when all workers in the pool have IPC transport.
+    pub fn has_transport(&self) -> bool {
+        !self.workers.is_empty() && self.workers.iter().all(Worker::has_transport)
+    }
+
+    pub fn configured_workers(&self) -> usize {
+        self.max_workers
+    }
+
+    /// Route an HTTP request through an idle Octane worker.
+    pub async fn handle_http_request(
+        &mut self,
+        method: String,
+        uri: String,
+        headers: HashMap<String, Vec<String>>,
+        body: Option<Vec<u8>>,
+        timeout_ms: u64,
+    ) -> Result<PhpResponse, WorkerError> {
+        if !self.is_ready() {
+            return Err(WorkerError::Handshake(
+                "octane pool not ready for HTTP dispatch".into(),
+            ));
+        }
+
+        let worker_id = self
+            .idle_queue
+            .pop()
+            .ok_or_else(|| WorkerError::Handshake("no idle octane workers available".into()))?;
+
+        let result = self.workers[worker_id]
+            .handle_request(method, uri, headers, body, timeout_ms)
+            .await;
+
+        self.return_worker(worker_id);
+
+        match result {
+            Ok(IpcMessage::Response { status, body, .. }) => {
+                self.total_handled.fetch_add(1, Ordering::SeqCst);
+                Ok(PhpResponse {
+                    status,
+                    headers: http::HeaderMap::new(),
+                    body: Bytes::from(body),
+                })
+            }
+            Ok(other) => {
+                self.total_errors.fetch_add(1, Ordering::SeqCst);
+                Err(WorkerError::Handshake(format!(
+                    "unexpected IPC message from worker: {:?}",
+                    std::mem::discriminant(&other)
+                )))
+            }
+            Err(e) => {
+                self.total_errors.fetch_add(1, Ordering::SeqCst);
+                Err(e)
+            }
+        }
     }
 
     /// Get an idle worker from the pool.
@@ -438,10 +537,19 @@ impl WorkerPool {
         // Remove from idle queue first (worker is draining)
         self.idle_queue.retain(|&id| id != worker_id);
         self.workers[worker_id].state = WorkerState::Draining;
+        let had_transport = self.workers[worker_id].has_transport();
         self.workers[worker_id].stop().await?;
 
         let new_worker =
-            Worker::spawn(worker_id, self.app_root.clone(), self.max_memory_mb).await?;
+            match Worker::spawn(worker_id, self.app_root.clone(), self.max_memory_mb).await {
+                Ok(worker) => worker,
+                Err(e) if !had_transport => {
+                    // STUB_CONTRACT: stub pools (no PHP) keep stub workers; live pools fail closed.
+                    warn!("Worker {worker_id} recycle stub — spawn unavailable: {e}");
+                    Worker::new_test_stub(worker_id)
+                }
+                Err(e) => return Err(e),
+            };
         self.workers[worker_id] = new_worker;
         self.idle_queue.push(worker_id);
 
@@ -491,6 +599,26 @@ impl WorkerPool {
 
     pub fn worker_mut(&mut self, id: usize) -> &mut Worker {
         &mut self.workers[id]
+    }
+
+    /// Populate the pool with fake loopback IPC workers so `is_ready()` is true (tests only).
+    ///
+    /// STUB_CONTRACT: not PHP; used by gateway Octane dispatch tests (sector S02).
+    #[doc(hidden)]
+    pub async fn initialize_test_ready_fake_ipc(&mut self) -> Result<(), WorkerError> {
+        self.workers.clear();
+        self.idle_queue.clear();
+        for i in 0..self.max_workers {
+            let worker = crate::test_fake_ipc::spawn_fake_tcp_worker(i).await?;
+            self.push_test_worker(worker);
+            self.enqueue_idle_worker(i);
+        }
+        if !self.is_ready() {
+            return Err(WorkerError::Handshake(
+                "fake IPC pool failed is_ready()".into(),
+            ));
+        }
+        Ok(())
     }
 
     /// Populate the pool with stub workers (no PHP spawn). For tests only.

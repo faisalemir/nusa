@@ -113,7 +113,15 @@ async fn start_server(config_path: &str) -> anyhow::Result<()> {
     // 3. Initialize Engine based on config (m04-zero-cost: dyn dispatch)
     let engine: Arc<dyn PhpEngine> = match cfg.engine {
         EngineKind::Ffi => Arc::new(nusa_engine_ffi::FfiEngine::new(cfg.max_workers)),
-        EngineKind::Wasm => Arc::new(nusa_engine_wasm::WasmEngine::stub()),
+        EngineKind::Wasm => {
+            if std::env::var("NUSA_ALLOW_WASM_STUB").is_err() {
+                anyhow::bail!(
+                    "engine=wasm is dev-only (WasmEngine::stub); use engine=child for production \
+                     or set NUSA_ALLOW_WASM_STUB=1 for local experiments"
+                );
+            }
+            Arc::new(nusa_engine_wasm::WasmEngine::stub())
+        }
         EngineKind::Child => Arc::new(nusa_engine_child::ChildEngine::with_default_php()),
     };
 
@@ -164,33 +172,25 @@ async fn start_server(config_path: &str) -> anyhow::Result<()> {
     // 17. Metrics (A1)
     let metrics = Arc::new(NusaMetrics::init());
 
-    // 18. Octane Worker Pool (M2)
-    // Initialize WorkerPool when octane_workers > 0 (M2: Octane Core)
-    let octane_pool = if cfg.octane_workers > 0 {
-        let app_root = std::path::PathBuf::from(&cfg.code_dir);
-        let mut pool = nusa_octane_worker::pool::WorkerPool::new(
-            cfg.octane_workers,
-            app_root,
-            cfg.octane_max_memory_mb,
-            cfg.octane_max_requests,
-        );
-        match pool.initialize().await {
-            Ok(()) => {
-                tracing::info!(
-                    "Octane worker pool initialized with {} workers",
-                    cfg.octane_workers
-                );
-                Some(pool)
-            }
-            Err(e) => {
-                tracing::warn!("Failed to initialize Octane worker pool: {}", e);
-                None
-            }
+    // 18. Octane Worker Pool (M2) — fail closed when configured but PHP/IPC unavailable
+    let octane_pool = match nusa_cli::octane_pool::init_octane_pool(
+        cfg.octane_workers,
+        std::path::PathBuf::from(&cfg.code_dir),
+        cfg.octane_max_memory_mb,
+        cfg.octane_max_requests,
+    )
+    .await?
+    {
+        Some(pool) => {
+            tracing::info!(
+                "Octane worker pool ready with {} workers",
+                cfg.octane_workers
+            );
+            Some(pool)
         }
-    } else {
-        None
+        None => None,
     };
-    let octane_pool = Arc::new(parking_lot::Mutex::new(octane_pool));
+    let octane_pool = Arc::new(tokio::sync::Mutex::new(octane_pool));
     let mut octane_reset = nusa_octane_worker::state_reset::StateResetOrchestrator::new(128);
     octane_reset.initialize();
     let octane_reset = Arc::new(parking_lot::Mutex::new(octane_reset));
@@ -251,7 +251,7 @@ async fn start_server(config_path: &str) -> anyhow::Result<()> {
 
         // Shutdown Octane worker pool if active
         // Extract pool first to avoid holding MutexGuard across await
-        let pool_opt = octane_pool_shutdown.lock().take();
+        let pool_opt = octane_pool_shutdown.lock().await.take();
 
         if let Some(mut pool) = pool_opt {
             let _ = pool.shutdown().await;

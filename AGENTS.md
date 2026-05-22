@@ -17,7 +17,8 @@ Optional deep context (local, gitignored): `docs/plan/` blueprint 0–6.
 
 | Audience | Start here |
 |----------|------------|
-| Deploy / operate | [`README.md`](README.md) → [`docs/public/`](docs/public/) |
+| Laravel developers | [`docs/public/laravel/README.md`](docs/public/laravel/README.md) · [`docs/public/quick-start.md`](docs/public/quick-start.md) |
+| Deploy / operate | [`docs/public/README.md`](docs/public/README.md) · [runbook](docs/public/operations/runbook.md) |
 | Contribute code | [`CONTRIBUTING.md`](CONTRIBUTING.md) → [`docs/contributor/`](docs/contributor/) |
 | AI agents | This file → [`docs/ai/`](docs/ai/) |
 
@@ -29,9 +30,9 @@ Optional deep context (local, gitignored): `docs/plan/` blueprint 0–6.
 - **English** for code comments, commits, and docs.
 - **Do not claim GA / production-ready** until Phase 5 KPIs in [`docs/public/production-status.md`](docs/public/production-status.md) are met.
 
-## Current implementation blocker (check before Octane work)
+## Octane HTTP dispatch (P1 complete)
 
-When `octane_workers > 0`, the worker pool is initialized in CLI but the **HTTP handler still calls `engine.execute` only** — it does not dispatch to `WorkerPool`. See [`docs/ai/hotspots.md`](docs/ai/hotspots.md) and P1 in the production plan.
+When `octane_pool` is initialized and `pool.is_ready()`, the gateway catch-all handler dispatches via `WorkerPool::handle_http_request` (not `engine.execute`). `/ready` fails closed if workers are configured but lack IPC transport. See [`crates/nusa-gateway/src/lib.rs`](crates/nusa-gateway/src/lib.rs) and [`docs/ai/hotspots.md`](docs/ai/hotspots.md).
 
 ## Skills (project)
 

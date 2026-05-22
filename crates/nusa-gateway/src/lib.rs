@@ -26,6 +26,7 @@ pub mod tenant_circuit_breaker;
 pub mod tls;
 pub mod websocket;
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -71,8 +72,8 @@ pub struct AppState {
     pub metrics: Arc<NusaMetrics>,
     pub prometheus_handle: Arc<metrics_exporter_prometheus::PrometheusHandle>,
     /// Octane worker pool (M2: Octane Core).
-    /// Wrapped in Arc<Mutex> for shared mutable access.
-    pub octane_pool: Arc<Mutex<Option<WorkerPool>>>,
+    /// `tokio::sync::Mutex` so handlers can `.await` dispatch without holding `parking_lot` guards.
+    pub octane_pool: Arc<tokio::sync::Mutex<Option<WorkerPool>>>,
     /// Octane state reset orchestrator.
     pub octane_reset: Arc<Mutex<StateResetOrchestrator>>,
 }
@@ -95,7 +96,7 @@ pub fn app(
     static_handler: Arc<StaticFileHandler>,
     metrics: Arc<NusaMetrics>,
     prometheus_handle: Arc<metrics_exporter_prometheus::PrometheusHandle>,
-    octane_pool: Arc<Mutex<Option<WorkerPool>>>,
+    octane_pool: Arc<tokio::sync::Mutex<Option<WorkerPool>>>,
     octane_reset: Arc<Mutex<StateResetOrchestrator>>,
 ) -> Router {
     let state = AppState {
@@ -125,8 +126,13 @@ pub fn app(
             "/ready",
             axum::routing::get({
                 let hs = state.health_state.clone();
+                let octane_pool = state.octane_pool.clone();
                 move || async move {
-                    if hs.is_ready() {
+                    let octane_ok = match octane_pool.lock().await.as_ref() {
+                        None => true,
+                        Some(pool) => pool.is_ready(),
+                    };
+                    if hs.is_ready() && octane_ok {
                         (StatusCode::OK, "READY")
                     } else {
                         (StatusCode::SERVICE_UNAVAILABLE, "Not Ready")
@@ -148,7 +154,8 @@ pub fn app(
         )
         // Static files (Blueprint 6 E1)
         .route("/static/{*path}", axum::routing::get(static_file_handler))
-        // Catch-all route for PHP scripts
+        // Root + catch-all for PHP (axum `/{*path}` does not match `/` alone)
+        .route("/", axum::routing::get(handler).post(handler))
         .route("/{*path}", axum::routing::get(handler).post(handler))
         // Middleware Chain: trace, CORS, compression, size limit
         .layer(
@@ -318,13 +325,73 @@ async fn handler(State(state): State<AppState>, req: Request<Body>) -> Response<
         }
     }
 
-    // Execute PHP Engine with timeout
-    match with_timeout(
-        state.resource_guard.request_timeout_ms,
-        state.engine.execute(ctx),
-    )
-    .await
-    {
+    let method_str = method.to_string();
+    let uri_str = uri
+        .path_and_query()
+        .map(|p| p.as_str())
+        .unwrap_or_else(|| uri.path())
+        .to_string();
+
+    let octane_mode = {
+        let guard = state.octane_pool.lock().await;
+        match guard.as_ref() {
+            None => OctaneRoute::Engine,
+            Some(pool) if pool.is_ready() => OctaneRoute::Pool,
+            Some(_) => OctaneRoute::NotReady,
+        }
+    };
+
+    if matches!(octane_mode, OctaneRoute::NotReady) {
+        state.metrics.requests_failed_total.increment(1);
+        state.health_state.record_error();
+        drop(permit);
+        return response::status_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Service Unavailable: Octane worker pool not ready",
+        );
+    }
+
+    let timeout_ms = state.resource_guard.request_timeout_ms;
+    let execution = match octane_mode {
+        OctaneRoute::Pool => {
+            let headers = http_headers_to_ipc(ctx.headers());
+            let body = if ctx.body().is_empty() {
+                None
+            } else {
+                Some(ctx.body().to_vec())
+            };
+            let request_id = ctx.trace_id().to_string();
+            state.octane_reset.lock().emit_event(
+                nusa_octane_worker::state_reset::OctaneEvent::RequestReceived {
+                    request_id: request_id.clone(),
+                },
+            );
+            let pool = state.octane_pool.clone();
+            let reset = state.octane_reset.clone();
+            let result = with_timeout(timeout_ms, async move {
+                let mut pool_guard = pool.lock().await;
+                let pool = pool_guard
+                    .as_mut()
+                    .expect("OctaneRoute::Pool implies Some(pool)");
+                pool.handle_http_request(method_str, uri_str, headers, body, timeout_ms)
+                    .await
+                    .map_err(|e| nusa_core::EngineError::IpcProtocol(e.to_string()))
+            })
+            .await;
+            let status = result.as_ref().map(|r| r.status).unwrap_or(500);
+            reset.lock().emit_event(
+                nusa_octane_worker::state_reset::OctaneEvent::RequestTerminated {
+                    request_id,
+                    status,
+                },
+            );
+            result
+        }
+        OctaneRoute::Engine => with_timeout(timeout_ms, state.engine.execute(ctx)).await,
+        OctaneRoute::NotReady => unreachable!(),
+    };
+
+    match execution {
         Ok(res) => {
             state.circuit_breaker.record_success();
             if let Some(tid) = &tenant_id_for_cb {
@@ -346,12 +413,31 @@ async fn handler(State(state): State<AppState>, req: Request<Body>) -> Response<
             state.metrics.requests_failed_total.increment(1);
             state.health_state.record_error();
             drop(permit);
-            tracing::error!(err = %e, "engine execution failed");
+            tracing::error!(err = %e, "request execution failed");
             let status = StatusCode::from_u16(e.to_http_status())
                 .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
             response::status_response(status, format!("Upstream Error: {e}"))
         }
     }
+}
+
+#[derive(Copy, Clone, Eq, PartialEq)]
+enum OctaneRoute {
+    Engine,
+    Pool,
+    NotReady,
+}
+
+fn http_headers_to_ipc(headers: &http::HeaderMap) -> HashMap<String, Vec<String>> {
+    let mut map: HashMap<String, Vec<String>> = HashMap::new();
+    for (name, value) in headers.iter() {
+        if let Ok(s) = value.to_str() {
+            map.entry(name.as_str().to_string())
+                .or_default()
+                .push(s.to_string());
+        }
+    }
+    map
 }
 
 /// Build RequestContext from HTTP request.
@@ -395,5 +481,14 @@ async fn build_request_context(
 /// Convert PhpResponse to HTTP Response.
 fn build_http_response(php_resp: PhpResponse) -> Response<Body> {
     let status = StatusCode::from_u16(php_resp.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
-    response::status_response(status, php_resp.body.to_vec())
+    let body_bytes = php_resp.body.to_vec();
+    let mut builder = Response::builder().status(status);
+    for (name, value) in php_resp.headers.iter() {
+        if let Ok(v) = value.to_str() {
+            builder = builder.header(name, v);
+        }
+    }
+    builder
+        .body(Body::from(body_bytes.clone()))
+        .unwrap_or_else(|_| response::status_response(status, body_bytes))
 }

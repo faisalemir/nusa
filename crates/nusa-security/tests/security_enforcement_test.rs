@@ -125,14 +125,16 @@ fn landlock_symlink_outside_sandbox_blocked() {
     let result = apply_landlock(code_dir, tmp_dir);
 
     // === Assert ===
-    if result.is_ok() {
-        // Reading through the symlink should be blocked
-        let read_result = fs::read_to_string(&symlink_path);
-        assert!(
-            read_result.is_err(),
-            "reading symlink outside sandbox should be blocked"
-        );
-    }
+    assert!(
+        result.is_ok(),
+        "Landlock must apply on production Alpine Linux (just podman-ci): {:?}",
+        result
+    );
+    let read_result = fs::read_to_string(&symlink_path);
+    assert!(
+        read_result.is_err(),
+        "reading symlink outside sandbox should be blocked"
+    );
 
     let _ = fs::remove_file(&symlink_path);
     let _ = fs::remove_dir_all(code_dir);
@@ -160,12 +162,14 @@ fn landlock_path_traversal_within_sandbox() {
     let result = apply_landlock(code_dir, tmp_dir);
 
     // === Assert ===
-    if result.is_ok() {
-        // Reading within code_dir should succeed
-        let read_result = fs::read_to_string(&test_file);
-        assert!(read_result.is_ok(), "read within code_dir should succeed");
-        assert_eq!(read_result.expect("should be ok"), "hello");
-    }
+    assert!(
+        result.is_ok(),
+        "Landlock must apply on production Alpine Linux (just podman-ci): {:?}",
+        result
+    );
+    let read_result = fs::read_to_string(&test_file);
+    assert!(read_result.is_ok(), "read within code_dir should succeed");
+    assert_eq!(read_result.expect("should be ok"), "hello");
 
     let _ = fs::remove_dir_all(code_dir);
     let _ = fs::remove_dir_all(tmp_dir);
@@ -189,14 +193,13 @@ fn landlock_network_socket_creation_blocked() {
     let result = apply_landlock(code_dir, tmp_dir);
 
     // === Assert ===
-    // Note: Landlock only restricts filesystem access, not network sockets
-    // Network restrictions would need to be enforced separately
-    if result.is_ok() {
-        // Network socket creation may still work with Landlock (filesystem only)
-        // This test verifies Landlock does not affect network operations
-        // (In production, seccomp handles network restrictions)
-        let _ = TcpListener::bind("127.0.0.1:0");
-    }
+    // Landlock restricts filesystem only; network is enforced by seccomp in production.
+    assert!(
+        result.is_ok(),
+        "Landlock must apply on production Alpine Linux (just podman-ci): {:?}",
+        result
+    );
+    let _ = TcpListener::bind("127.0.0.1:0");
 
     let _ = fs::remove_dir_all(code_dir);
     let _ = fs::remove_dir_all(tmp_dir);
@@ -243,7 +246,7 @@ fn seccomp_denied_syscall_triggers_sigsys() {
 
     // Build a minimal filter that blocks ptrace
     let mut rules = BTreeMap::new();
-    rules.insert(libc::SYS_ptrace as i64, vec![]);
+    rules.insert(libc::SYS_ptrace, vec![]);
 
     let filter = SeccompFilter::new(
         rules,
@@ -327,14 +330,16 @@ fn security_both_landlock_and_seccomp_apply() {
     let seccomp_result = verify_seccomp_filter();
 
     // === Assert ===
-    // Either both succeed or one/both fail gracefully
-    // The key invariant: neither should panic
-    if landlock_result.is_ok() {
-        tracing::debug!("Landlock applied successfully");
-    }
-    if seccomp_result.is_ok() {
-        tracing::debug!("Seccomp applied successfully");
-    }
+    assert!(
+        landlock_result.is_ok(),
+        "Landlock must apply on production Alpine Linux (just podman-ci): {:?}",
+        landlock_result
+    );
+    assert!(
+        seccomp_result.is_ok(),
+        "seccomp filter must build on production Alpine Linux (just podman-ci): {:?}",
+        seccomp_result
+    );
 
     let _ = fs::remove_dir_all(code_dir);
     let _ = fs::remove_dir_all(tmp_dir);

@@ -11,6 +11,61 @@ use uuid::Uuid;
 
 use crate::trace::TraceContext;
 
+/// JSON body field: PHP workers send UTF-8 strings; Rust tests may use byte arrays.
+mod json_body {
+    use serde::{Deserializer, Serializer};
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<u8>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct BodyVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for BodyVisitor {
+            type Value = Vec<u8>;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a byte array or UTF-8 string")
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(v.as_bytes().to_vec())
+            }
+
+            fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E> {
+                Ok(v.to_vec())
+            }
+
+            fn visit_byte_buf<E>(self, v: Vec<u8>) -> Result<Self::Value, E> {
+                Ok(v)
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::SeqAccess<'de>,
+            {
+                let mut bytes = Vec::new();
+                while let Some(b) = seq.next_element::<u8>()? {
+                    bytes.push(b);
+                }
+                Ok(bytes)
+            }
+        }
+
+        deserializer.deserialize_any(BodyVisitor)
+    }
+
+    pub fn serialize<S>(bytes: &[u8], serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.collect_seq(bytes.iter())
+    }
+}
+
 /// Unique ID for each request/task to correlate responses
 ///
 /// # Example
@@ -70,6 +125,7 @@ pub enum IpcMessage {
         id: RequestId,
         status: u16,
         headers: HashMap<String, Vec<String>>,
+        #[serde(with = "json_body")]
         body: Vec<u8>,
         terminated: bool,
     },

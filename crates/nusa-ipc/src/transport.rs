@@ -91,6 +91,21 @@ impl TransportStream {
 }
 
 impl IpcTransport {
+    /// Wrap an already-connected TCP stream (test-only fake IPC worker servers).
+    #[doc(hidden)]
+    pub fn from_connected_tcp(stream: TcpStream) -> Self {
+        #[cfg(unix)]
+        {
+            Self {
+                stream: TransportStream::Tcp(stream),
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            Self { stream }
+        }
+    }
+
     /// Connect to a UnixSocket or TCP server.
     /// On Unix: tries Unix socket first, falls back to TCP if path contains `:`.
     /// On Windows: uses TCP transport.
@@ -194,6 +209,7 @@ impl IpcTransport {
         method: String,
         uri: String,
         headers: HashMap<String, Vec<String>>,
+        body: Option<Vec<u8>>,
         timeout_ms: u64,
     ) -> Result<IpcMessage, IpcError> {
         let id = RequestId::new();
@@ -208,7 +224,7 @@ impl IpcTransport {
             post: Default::default(),
             cookies: Default::default(),
             files: vec![],
-            body: None,
+            body,
             server: Default::default(),
             timeout_ms,
             trace_context: Some(trace_context),

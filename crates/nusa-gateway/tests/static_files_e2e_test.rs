@@ -67,7 +67,7 @@ fn build_test_app(engine: Arc<dyn PhpEngine>) -> Router {
         Arc::new(StaticFileHandler::new("/app/public".into())),
         Arc::new(NusaMetrics::init()),
         prometheus_handle.clone(),
-        Arc::new(Mutex::new(None)),
+        Arc::new(tokio::sync::Mutex::new(None)),
         Arc::new(Mutex::new({
             let mut r = StateResetOrchestrator::new(128);
             r.initialize();

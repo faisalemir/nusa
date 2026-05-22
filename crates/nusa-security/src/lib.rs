@@ -12,10 +12,14 @@ pub mod landlock;
 pub mod seccomp;
 
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(target_os = "linux")]
 use std::sync::Mutex;
+#[cfg(target_os = "linux")]
+use std::sync::atomic::{AtomicBool, Ordering};
 
+#[cfg(target_os = "linux")]
 static LANDLOCK_GUARD: Mutex<()> = Mutex::new(());
+#[cfg(target_os = "linux")]
 static LANDLOCK_APPLIED: AtomicBool = AtomicBool::new(false);
 
 /// Apply Landlock rules to restrict filesystem access (domain-cloud-native).

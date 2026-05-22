@@ -2,7 +2,9 @@
 
 Moving Laravel to Nusa is a **platform upgrade**, not a find-and-replace of `public/index.php`. You gain a unified edge (HTTP, metrics, tenancy, circuit breaking, kernel sandbox) and you retire a patchwork of web server, FPM pool, and process manager configs.
 
-This guide walks **from**, **to**, and **what changes in your mental model**—with explicit v0.1.0 caveats where Octane HTTP dispatch is still landing (P1).
+This guide walks **from**, **to**, and **what changes in your mental model**. Octane HTTP dispatch is implemented in v0.1.0—validate on Alpine staging before production cutover.
+
+**Laravel-focused guides:** [laravel/README.md](laravel/README.md).
 
 ---
 

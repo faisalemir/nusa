@@ -19,3 +19,4 @@ seccompiler = "0.5"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt"] }
+serial_test = "3"

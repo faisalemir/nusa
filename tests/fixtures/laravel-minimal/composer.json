@@ -1,0 +1,37 @@
+{
+    "name": "nusa/laravel-minimal-fixture",
+    "description": "Minimal Laravel app for Nusa Alpine E2E (P2)",
+    "type": "project",
+    "license": "MIT",
+    "require": {
+        "php": "^8.2",
+        "laravel/framework": "^11.31",
+        "nusa/octane": "@dev"
+    },
+    "repositories": [
+        {
+            "type": "path",
+            "url": "../../../php-driver",
+            "options": {
+                "symlink": true
+            }
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "App\\": "app/"
+        }
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "sort-packages": true,
+        "platform": {
+            "php": "8.4.21"
+        },
+        "allow-plugins": {
+            "php-http/discovery": true
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}

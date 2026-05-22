@@ -4,6 +4,7 @@
 # Environment variables with prefix NUSA_ override these values.
 
 # PHP execution engine: "child" | "ffi" | "wasm"
+# wasm is dev-only unless NUSA_ALLOW_WASM_STUB=1 (CLI exits otherwise)
 engine = "child"
 
 # Concurrent request limit / backpressure (must be > 0)

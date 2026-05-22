@@ -213,7 +213,7 @@ async fn quic_fallback_to_http2_works() {
         Arc::new(StaticFileHandler::new("/app/public".into())),
         Arc::new(NusaMetrics::init()),
         get_prometheus_handle(),
-        Arc::new(parking_lot::Mutex::new(None)),
+        Arc::new(tokio::sync::Mutex::new(None)),
         Arc::new(parking_lot::Mutex::new({
             let mut r = StateResetOrchestrator::new(128);
             r.initialize();

@@ -16,6 +16,11 @@ fn test_app_root() -> PathBuf {
     dir
 }
 
+/// STUB_CONTRACT: queue/lifecycle domain tests; live PHP pool covered in podman-test-laravel.
+fn init_stub_pool(pool: &mut WorkerPool) {
+    pool.initialize_test_stubs();
+}
+
 // ─── 1. Worker Lifecycle ──────────────────────────────────────────────────
 
 #[tokio::test]
@@ -43,9 +48,7 @@ async fn worker_counters_start_at_zero() {
 
 #[tokio::test]
 async fn worker_should_recycle_by_request_count() {
-    let worker = Worker::spawn(99, test_app_root(), 256)
-        .await
-        .expect("stub worker");
+    let worker = Worker::new_test_stub(99);
 
     // Should NOT recycle at 0 requests
     assert!(!worker.should_recycle(100, 256));
@@ -62,9 +65,7 @@ async fn worker_should_recycle_by_request_count() {
 
 #[tokio::test]
 async fn worker_stop_sets_state_to_stopped() {
-    let mut worker = Worker::spawn(1, test_app_root(), 256)
-        .await
-        .expect("stub worker");
+    let mut worker = Worker::new_test_stub(1);
     assert_eq!(worker.state, WorkerState::Idle);
 
     let _ = worker.stop().await;
@@ -73,12 +74,16 @@ async fn worker_stop_sets_state_to_stopped() {
 
 #[tokio::test]
 async fn worker_handle_request_without_transport_returns_no_transport_error() {
-    let mut worker = Worker::spawn(2, test_app_root(), 256)
-        .await
-        .expect("stub worker");
+    let mut worker = Worker::new_test_stub(2);
     // Stub mode has no transport
     let result = worker
-        .handle_request("GET".to_string(), "/".to_string(), 5000)
+        .handle_request(
+            "GET".to_string(),
+            "/".to_string(),
+            Default::default(),
+            None,
+            5000,
+        )
         .await;
     assert!(result.is_err());
     match result.expect_err("expected error") {
@@ -102,15 +107,26 @@ async fn pool_new_initializes_empty() {
 }
 
 #[tokio::test]
-async fn pool_initialize_starts_workers() {
-    // On Windows or without PHP, initialize will fail gracefully
+async fn pool_stub_initialize_starts_workers() {
+    let mut pool = WorkerPool::new(2, test_app_root(), 256, 100);
+    init_stub_pool(&mut pool);
+    assert_eq!(pool.worker_count(), 2);
+    assert_eq!(pool.idle_count(), 2);
+    assert!(
+        !pool.is_ready(),
+        "stub pool must not report production-ready"
+    );
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn pool_production_initialize_fails_without_php_driver() {
     let mut pool = WorkerPool::new(2, test_app_root(), 256, 100);
     let result = pool.initialize().await;
-    // May fail due to missing PHP binary — that's expected on this platform
-    if result.is_ok() {
-        assert_eq!(pool.worker_count(), 2);
-        assert_eq!(pool.idle_count(), 2);
-    }
+    assert!(
+        result.is_err(),
+        "production initialize without php-driver must fail closed"
+    );
 }
 
 #[tokio::test]
@@ -124,71 +140,57 @@ async fn pool_get_idle_worker_returns_some() {
 #[tokio::test]
 async fn pool_return_worker_adds_to_idle_queue() {
     let mut pool = WorkerPool::new(2, test_app_root(), 256, 100);
-    let result = pool.initialize().await;
-    if result.is_ok() {
-        let initial_idle = pool.idle_count();
-        let worker_id = pool
-            .get_idle_worker()
-            .expect("initialized pool should have idle worker")
-            .id;
-        assert_eq!(pool.idle_count(), initial_idle - 1);
-        pool.return_worker(worker_id);
-        assert_eq!(pool.idle_count(), initial_idle);
-    }
+    init_stub_pool(&mut pool);
+    let initial_idle = pool.idle_count();
+    let worker_id = pool
+        .get_idle_worker()
+        .expect("stub pool should have idle worker")
+        .id;
+    assert_eq!(pool.idle_count(), initial_idle - 1);
+    pool.return_worker(worker_id);
+    assert_eq!(pool.idle_count(), initial_idle);
 }
 
 #[tokio::test]
 async fn pool_return_worker_in_draining_state_not_added() {
     let mut pool = WorkerPool::new(2, test_app_root(), 256, 100);
-    let result = pool.initialize().await;
-    if result.is_ok() {
-        let worker_id = pool
-            .get_idle_worker()
-            .expect("initialized pool should have idle worker")
-            .id;
-        let initial_idle = pool.idle_count();
-        pool.worker_mut(worker_id).state = WorkerState::Draining;
-        pool.return_worker(worker_id);
-        assert_eq!(pool.idle_count(), initial_idle);
-    }
+    init_stub_pool(&mut pool);
+    let worker_id = pool
+        .get_idle_worker()
+        .expect("stub pool should have idle worker")
+        .id;
+    let initial_idle = pool.idle_count();
+    pool.worker_mut(worker_id).state = WorkerState::Draining;
+    pool.return_worker(worker_id);
+    assert_eq!(pool.idle_count(), initial_idle);
 }
 
 #[tokio::test]
 async fn pool_shutdown_clears_all_workers() {
     let mut pool = WorkerPool::new(2, test_app_root(), 256, 100);
-    let result = pool.initialize().await;
-    if result.is_ok() {
-        assert!(pool.worker_count() > 0);
-        let _ = pool.shutdown().await;
-        assert_eq!(pool.worker_count(), 0);
-        assert_eq!(pool.idle_count(), 0);
-    }
+    init_stub_pool(&mut pool);
+    assert!(pool.worker_count() > 0);
+    let _ = pool.shutdown().await;
+    assert_eq!(pool.worker_count(), 0);
+    assert_eq!(pool.idle_count(), 0);
 }
 
 #[tokio::test]
 async fn pool_scale_up_adds_workers() {
     let mut pool = WorkerPool::new(1, test_app_root(), 256, 100);
-    let result = pool.initialize().await;
-    if result.is_ok() {
-        assert_eq!(pool.worker_count(), 1);
-    }
+    init_stub_pool(&mut pool);
+    assert_eq!(pool.worker_count(), 1);
 }
 
 #[tokio::test]
 async fn pool_starvation_behavior_queues_with_timeout() {
-    // When M > N requests, queuing should occur with timeout
     let mut pool = WorkerPool::new(1, test_app_root(), 256, 100);
-    let result = pool.initialize().await;
-    if result.is_ok() {
-        // Get the only worker
-        let worker = pool.get_idle_worker();
-        assert!(worker.is_some());
-
-        // Now idle queue should be empty — next request would queue
-        assert_eq!(pool.idle_count(), 0);
-        let next = pool.get_idle_worker();
-        assert!(next.is_none(), "should have no idle workers");
-    }
+    init_stub_pool(&mut pool);
+    let worker = pool.get_idle_worker();
+    assert!(worker.is_some());
+    assert_eq!(pool.idle_count(), 0);
+    let next = pool.get_idle_worker();
+    assert!(next.is_none(), "should have no idle workers");
 }
 
 // ─── 3. Handshake ─────────────────────────────────────────────────────────

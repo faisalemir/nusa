@@ -21,7 +21,10 @@ async fn closed_local_tcp_addr() -> String {
 async fn tcp_connect_refuses_closed_local_port() {
     let addr = closed_local_tcp_addr().await;
     let result = IpcTransport::connect(&addr).await;
-    assert!(result.is_err(), "production tcp_connect must fail on closed port");
+    assert!(
+        result.is_err(),
+        "production tcp_connect must fail on closed port"
+    );
 }
 
 // ── TCP Echo Server Test ──

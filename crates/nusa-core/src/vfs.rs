@@ -49,12 +49,12 @@ impl DefaultTenantVfs {
         if relative.starts_with('/') || relative.starts_with('\\') {
             return false;
         }
-        if let Some((drive, rest)) = relative.split_once(':') {
-            if drive.len() == 1 && drive.as_bytes()[0].is_ascii_alphabetic() {
-                if rest.is_empty() || rest.starts_with('/') || rest.starts_with('\\') {
-                    return false;
-                }
-            }
+        if let Some((drive, rest)) = relative.split_once(':')
+            && drive.len() == 1
+            && drive.as_bytes()[0].is_ascii_alphabetic()
+            && (rest.is_empty() || rest.starts_with('/') || rest.starts_with('\\'))
+        {
+            return false;
         }
 
         // Reject .. components

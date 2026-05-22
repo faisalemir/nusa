@@ -12,6 +12,7 @@ members = [
     "crates/nusa-telemetry",
     "crates/nusa-cli",
     "crates/nusa-octane-worker",
+    "crates/nusa-e2e-tests",
     "benches",
 ]
 
@@ -61,8 +62,8 @@ uuid = { version = "1", features = ["v4", "serde"] }
 bytes = "1"
 
 # Security & Sandbox
-wasmtime = "44"
-wasmtime-wasi = "44"
+wasmtime = "44.0.2"
+wasmtime-wasi = "44.0.2"
 wat = "1.240"
 
 # Utilities

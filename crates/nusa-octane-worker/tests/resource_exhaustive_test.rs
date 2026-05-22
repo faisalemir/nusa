@@ -127,7 +127,13 @@ async fn worker_handle_request_error_all_resources_freed() {
         let idx = pool.idle_count() - 1;
         let _ = pool
             .worker_mut(idx)
-            .handle_request("GET".to_string(), "/test".to_string(), 5000)
+            .handle_request(
+                "GET".to_string(),
+                "/test".to_string(),
+                Default::default(),
+                None,
+                5000,
+            )
             .await;
         pool.return_worker(pool.worker(idx).id);
     }

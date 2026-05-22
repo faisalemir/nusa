@@ -14,6 +14,8 @@ pub mod error;
 pub mod metrics;
 pub mod pool;
 pub mod state_reset;
+#[doc(hidden)]
+pub mod test_fake_ipc;
 
 pub use error::WorkerError;
 pub use pool::WorkerPool;

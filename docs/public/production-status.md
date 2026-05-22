@@ -11,7 +11,7 @@ This page is the contract between the Nusa team and everyone who deploys Laravel
 | Question | Answer |
 |----------|--------|
 | Is Nusa a credible platform engineering bet? | **Yes**—architecture, sandbox, gateway, IPC, and test depth are real |
-| Can I run it in production at unlimited scale today? | **Not yet**—finish P1 Octane HTTP dispatch, P2 Laravel E2E, P3–P4 benchmarks and release process |
+| Can I run it in production at unlimited scale today? | **Not yet**—sign off Alpine `just podman-ci` / `podman-ci-e2e`, then P3–P4 benchmarks and release process |
 | Can I pilot in staging / internal platforms? | **Yes**, on Linux/Alpine with eyes open on the gaps below |
 | What proves quality? | **`just podman-ci`** on Alpine musl—not host-only green runs |
 
@@ -47,16 +47,15 @@ With `engine = "child"` and `octane_workers = 0`, requests flow through `PhpEngi
 
 Landlock and seccomp are applied **before** the server binds. CI on Alpine musl includes enforcement tests that **fail** if sandbox application cannot be verified—no “skip on error” pattern. For regulated and multi-tenant environments, that discipline is the difference between checkbox compliance and actual containment.
 
-### Octane subsystem (foundation complete, HTTP wire pending)
+### Octane subsystem (HTTP dispatch wired — validate in Alpine)
 
-The Octane story is substantial even before P1:
+- **Worker pool** with fail-closed `initialize()` when `octane_workers > 0`
+- **Gateway dispatch** to `WorkerPool::handle_http_request` when `pool.is_ready()`
+- **Framed IPC** with body, headers, and trace context
+- **State reset** events on RequestReceived / RequestTerminated
+- **PHP driver** (`octane-rust-worker`) + Laravel minimal fixture E2E (`just podman-test-laravel`)
 
-- **Worker pool** construction and initialization in the CLI
-- **Framed IPC** (`nusa-ipc`) with handshake, heartbeat, and request/response semantics
-- **State reset orchestrator** for leak-sensitive long-lived workers
-- **PHP driver** entry (`octane-rust-worker`) for Laravel bootstrap
-
-What remains is the **gateway routing decision**: when the pool is ready, HTTP must enter the pool path instead of only `engine.execute`. That is P1—not a redesign.
+Remaining for GA: published IPC P99 numbers, 10k leak sign-off on release hardware, public benchmark vs FPM (P3–P4).
 
 ### Observability and operations
 
@@ -72,11 +71,11 @@ The project maintains a **large, categorized test suite**—security, concurrenc
 
 | ID | Gap | Why it blocks GA | Phase |
 |----|-----|------------------|-------|
-| G1 | Gateway does not dispatch HTTP to `WorkerPool` when `octane_workers > 0` | Octane mode does not yet deliver its headline latency benefit over HTTP | **P1** |
-| G2 | `/ready` does not fail closed when Octane pool is required but unhealthy | Orchestrators may send traffic to a broken worker tier | **P1** |
-| G3 | CLI warns and continues if pool init fails while workers > 0 | Silent partial startup is unacceptable for production | **P1** |
-| G4 | No default CI Laravel fixture E2E | Need proof on real `vendor/` + `bootstrap/app.php` | **P2** |
-| G5 | Normal Mode latency KPIs and signed release process | GA bar is measured, not asserted | **P3–P4** |
+| G1 | Gateway HTTP → `WorkerPool` when `is_ready()` | **Addressed** — IPC dispatch with body/headers; engine when `octane_workers = 0` | — |
+| G2 | `/ready` when Octane pool required but unhealthy | **Addressed** — `/ready` checks `pool.is_ready()` | — |
+| G3 | CLI startup when `octane_workers > 0` | **Addressed** — process exits if init or ready fails | — |
+| G4 | Laravel fixture E2E in Alpine CI | **Addressed** — `tests/fixtures/laravel-minimal`, `nusa-e2e-tests`, `just podman-test-laravel` | — |
+| G5 | Normal Mode latency KPIs and signed release process | Templates in `docs/benchmarks/` — fill numbers before tag | **P3–P4** |
 | G6 | Blueprint “Phase 6” advanced features | Post-GA innovation track | **P5** |
 
 We do not hide these behind optimistic README tables. [Migration](migration.md) and [Operations](operations/runbook.md) repeat the Octane caveat where it affects your runbooks.
@@ -89,7 +88,7 @@ We do not hide these behind optimistic README tables. [Migration](migration.md) 
 |-----------|-------|--------|
 | **M0** | Philosophy, plugin model, workspace governance | **Strong** — vision documented; core traits in place |
 | **M1** | Normal mode gateway, engines, config hot-reload, telemetry | **Largely complete** — primary path for pilots |
-| **M2** | Octane core, IPC, worker recycle | **Partial** — pool and protocol; HTTP dispatch → P1 |
+| **M2** | Octane core, IPC, worker recycle | **Complete in CI** — HTTP dispatch + Laravel live tests in `podman-ci` |
 | **M3** | TLS, QUIC, ACME modules, WASM engine paths | **Partial** — code present; environment-dependent activation |
 | **M4** | Multi-tenant, tasks, plugins | **Partial** — gateway hooks and core types wired |
 | **M5** | Benchmarks, release matrix, GA | **Planned** |
@@ -111,9 +110,10 @@ Choose `child` unless you have a deliberate FFI validation program.
 ## How we verify releases
 
 ```bash
-just podman-build      # Alpine test image
-just podman-ci         # fmt + clippy (-D warnings) + tests — authoritative
-just podman-test-full  # full workspace run with logged results
+just podman-build      # when image inputs change (not every CI run)
+just podman-ci-fast    # fmt + lint + workspace tests (Rust-only loop)
+just podman-ci         # pre-merge: workspace + Laravel E2E — authoritative
+just podman-ci-e2e     # pre-GA: + leak 10k + IPC bench
 ```
 
 Host `just ci` helps developers on Windows or macOS iterate; it is **not** merge sign-off for production integrity.
@@ -122,9 +122,11 @@ Host `just ci` helps developers on Windows or macOS iterate; it is **not** merge
 
 ## Roadmap pointer
 
-Execution phases **P0–P5** are tracked in [contributor RFC](../contributor/rfc/production-readiness.md). Documentation you are reading is **P0**; Octane HTTP wiring is **P1**.
+Execution phases **P0–P5** are tracked in [contributor RFC](../contributor/rfc/production-readiness.md). **P0–P2 implementation is in the repo**; **P0 public docs** target [Laravel developers](laravel/README.md). Release sign-off requires green Alpine logs (`just podman-ci`, `just podman-ci-e2e`) and P3 benchmark numbers.
 
-When Phase 5 completes, this page will flip from “pre-GA with listed gaps” to “GA criteria met”—with benchmark numbers and release artifacts linked, not adjectives.
+Test sectors **S02** (Octane dispatch), **S14** (plugins), and **S15** (Laravel live + leak) are documented in [contributor testing](../contributor/testing.md).
+
+When P4 completes, this page will flip from “pre-GA with listed gaps” to “GA criteria met”—with benchmark numbers and release artifacts linked, not adjectives.
 
 ---
 

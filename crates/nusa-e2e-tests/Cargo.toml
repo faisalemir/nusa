@@ -1,0 +1,28 @@
+[package]
+name = "nusa-e2e-tests"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+description = "Live E2E tests (Laravel fixture, Alpine CI)"
+
+[lib]
+path = "src/lib.rs"
+
+[dev-dependencies]
+tokio = { workspace = true }
+bytes = { workspace = true }
+nusa-octane-worker = { path = "../nusa-octane-worker" }
+nusa-gateway = { path = "../nusa-gateway" }
+nusa-core = { path = "../nusa-core" }
+nusa-config = { path = "../nusa-config" }
+nusa-plugin-api = { path = "../nusa-plugin-api" }
+nusa-telemetry = { path = "../nusa-telemetry" }
+async-trait = { workspace = true }
+axum = { workspace = true }
+tower = { workspace = true }
+http = { workspace = true }
+metrics-exporter-prometheus = { workspace = true }
+parking_lot = { workspace = true }
+nusa-ipc = { path = "../nusa-ipc" }

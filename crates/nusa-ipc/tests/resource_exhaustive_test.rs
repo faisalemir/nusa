@@ -154,11 +154,10 @@ async fn ipctransport_connection_fails_all_resources_released() {
     let start_fds = count_open_fds();
 
     // === Act ===
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind");
-    let closed_addr = format!(
-        "127.0.0.1:{}",
-        listener.local_addr().expect("addr").port()
-    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind");
+    let closed_addr = format!("127.0.0.1:{}", listener.local_addr().expect("addr").port());
     drop(listener);
 
     for _ in 0..50 {
@@ -204,6 +203,7 @@ async fn ipctransport_request_response_timeout_no_orphaned_futures() {
             "GET".to_string(),
             "/timeout-test".to_string(),
             Default::default(),
+            None,
             50,
         ),
     )

@@ -13,8 +13,6 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/../vendor/autoload.php';
-
 use Nusa\Octane\Worker;
 
 $socketPath = $argv[1] ?? null;
@@ -24,8 +22,17 @@ if (!$socketPath) {
     exit(1);
 }
 
+// Nusa spawns this script with cwd = Laravel app root (fixture or deploy tree).
+$appRoot = getcwd();
+if ($appRoot === false || !is_file($appRoot . '/vendor/autoload.php')) {
+    fwrite(STDERR, "Laravel app root not found (cwd must contain vendor/autoload.php)\n");
+    exit(1);
+}
+
+require_once $appRoot . '/vendor/autoload.php';
+
 // Bootstrap Laravel application
-$app = require __DIR__ . '/../../bootstrap/app.php';
+$app = require $appRoot . '/bootstrap/app.php';
 $kernel = $app->make(Illuminate\Contracts\Http\Kernel::class);
 
 // Create worker and start IPC loop

@@ -35,13 +35,15 @@ Layer 1: Rust (HOW)       → m01–m15 actionbook skills
 
 ## Phase work (production plan)
 
-| Phase | Focus |
-|-------|--------|
-| P0 | Docs only — this tree |
-| P1 | Gateway Octane dispatch, `/ready` fail-closed, IPC body, spawn fail-closed |
-| P2 | Laravel fixture + E2E in `just podman-test-live` |
-| P3 | Criterion Normal Mode benchmarks |
-| P4 | GA v1.0 |
+| Phase | Focus | Gate |
+|-------|--------|------|
+| P0 | Docs — this tree | — |
+| P1 | Gateway Octane dispatch, `/ready` fail-closed, IPC body, spawn fail-closed | `just podman-ci` (S02) |
+| P2 | Laravel fixture + `nusa-e2e-tests` | `just podman-ci` + `podman-ci-e2e` (S15) |
+| P3 | Criterion Normal Mode benchmarks | `docs/benchmarks/*` filled |
+| P4 | GA v1.0 | Signed Alpine CI logs + CHANGELOG |
+
+Track sectors and gaps: [`docs/contributor/testing.md`](../contributor/testing.md), [`docs/contributor/rfc/production-readiness.md`](../contributor/rfc/production-readiness.md).
 
 Do not implement P5 (blueprint 6 advanced) before P4 unless explicitly requested.
 

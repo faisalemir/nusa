@@ -12,17 +12,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Documentation (P0)
 - Greenfield docs: `docs/public/`, `docs/contributor/`, `docs/ai/`, `docs/README.md`
 - `AGENTS.md` entry point for AI agents
-- Honest [production status](docs/public/production-status.md) (v0.1.0 pre-GA)
-- Expanded public narrative: vision, architecture value, migration story (still accurate on Octane P1 gap)
+- [production status](docs/public/production-status.md), [compatibility matrix](docs/public/compatibility-matrix.md)
+- Benchmark templates: `docs/benchmarks/`, `tests/load/`
+- Post-GA tracker: `docs/contributor/post-ga-blueprint.md`, `docs/observability/README.md`
+
+#### P1 — Octane HTTP dispatch
+- Gateway routes to `WorkerPool::handle_http_request` when pool is ready
+- `/ready` fail-closed when Octane workers configured but pool not ready
+- CLI exits if `octane_workers > 0` and pool init/ready fails
+- `Worker::spawn` returns `Err` on missing script/PHP/handshake (no silent stub in production path)
+- State reset events on Octane request path; HTTP response applies PHP headers
+
+#### P2 — Laravel E2E
+- Fixture `tests/fixtures/laravel-minimal`, crate `nusa-e2e-tests`
+- `just podman-test-laravel`, `just podman-ci-e2e`, leak suite, IPC bench smoke
+- IPC `Response.body` accepts JSON string from PHP workers
 
 ### Changed
-- `README.md` no longer claims Phase 1–4 complete or fixed 58-test count
-- `config.toml.example` documents Octane keys (`octane_workers`, recycle limits)
-- Migration and runbook moved under `docs/public/`
+- `README.md` and `AGENTS.md` aligned with Octane dispatch behavior
+- `config.toml.example` documents Octane keys and wasm dev-only policy
+- Migration and runbook under `docs/public/`
 
-### Known gaps (documented, not fixed in this release)
-- Gateway HTTP handler still calls `engine.execute` when Octane pool is configured (P1)
-- `/ready` does not fail closed on Octane pool init failure (P1)
+### Known gaps (pre-GA)
+- Published Normal Mode vs FPM numbers (`docs/benchmarks/normal-mode-report.md` — fill before v1.0.0)
+- Signed release / SBOM on tag (P4)
+- Blueprint 6 items (ACME/QUIC/blue-green) — see `docs/contributor/post-ga-blueprint.md`
 
 #### Phase 1: Normal Mode MVP (historical changelog — verify against code)
 - Static file serving wired — `/static/{*path}` routes to `StaticFileHandler` with LRU cache, MIME types, Cache-Control headers, directory traversal prevention

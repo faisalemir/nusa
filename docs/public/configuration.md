@@ -98,13 +98,15 @@ Backpressure and timeouts apply at the gateway; PHP lifecycle is request-scoped.
 
 The CLI constructs a **`WorkerPool`** sized to `octane_workers`, performs IPC handshake with each worker, and maintains recycle policy via memory and request counters.
 
-**Designed end state (P1):**
+**v0.1.0 behavior:**
 
 ```
 Gateway → WorkerPool::handle_http_request → IPC → Laravel worker → response
 ```
 
-**v0.1.0 reality:** pool may initialize while HTTP still uses `engine.execute`. Configure Octane for **worker and IPC validation**, not yet as a drop-in RoadRunner replacement over HTTP.
+When the pool is ready, HTTP does **not** call `engine.execute`. If the pool is configured but not ready, the gateway returns **503** (fail-closed).
+
+Laravel setup: [Octane mode](laravel/octane-mode.md).
 
 ---
 

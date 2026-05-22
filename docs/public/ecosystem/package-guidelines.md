@@ -75,14 +75,14 @@ Rust owns **when** to spawn and kill; PHP owns **how** to serve Laravel requests
 
 ---
 
-## Octane configuration (when HTTP dispatch is live)
+## Octane configuration
 
 Point Laravel Octane at the Nusa worker binary instead of RoadRunner’s:
 
 - Binary: `vendor/bin/octane-rust-worker` (or path from package `bin/`)  
 - Worker count: driven by **`octane_workers`** in `nusa.toml`, not duplicated blindly in `.env`  
 
-Until P1 gateway dispatch ships, use the driver to **validate worker boot and IPC** in staging—see [Production status](../production-status.md).
+HTTP dispatch through the pool is live in v0.1.0 when `pool.is_ready()`. User guide: [Octane mode](../laravel/octane-mode.md).
 
 ---
 

@@ -9,6 +9,8 @@ For Rust/PHP runtime development, testing, and architecture.
 3. [architecture.md](architecture.md) — request flow and components
 4. [crate-map.md](crate-map.md) — workspace crate responsibilities
 
+**Public docs (Laravel developers):** [docs/public/laravel/README.md](../public/laravel/README.md) — update when behavior visible to users changes.
+
 ## Deep dives
 
 | Topic | Document |

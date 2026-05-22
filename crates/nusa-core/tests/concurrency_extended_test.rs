@@ -183,7 +183,9 @@ async fn taskmanager_http_task_timeout_returns_error() {
     let manager = TaskManager::new();
 
     // === Act ===
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind");
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind");
     let closed_port = listener.local_addr().expect("addr").port();
     drop(listener);
 
@@ -733,7 +735,9 @@ async fn taskmanager_send_very_large_messages() {
     let manager = Arc::new(TaskManager::new());
 
     // === Act ===
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind");
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind");
     let closed_port = listener.local_addr().expect("addr").port();
     drop(listener);
 

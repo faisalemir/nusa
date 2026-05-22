@@ -27,6 +27,7 @@ COPY crates/nusa-config/Cargo.toml crates/nusa-config/
 COPY crates/nusa-telemetry/Cargo.toml crates/nusa-telemetry/
 COPY crates/nusa-cli/Cargo.toml crates/nusa-cli/
 COPY crates/nusa-octane-worker/Cargo.toml crates/nusa-octane-worker/
+COPY crates/nusa-e2e-tests/Cargo.toml crates/nusa-e2e-tests/
 COPY benches/Cargo.toml benches/
 
 RUN for d in crates/*/ benches; do \
@@ -38,6 +39,26 @@ RUN for d in crates/*/ benches; do \
 
 # Layer 2: full source + precompile all test binaries (used by podman-test-* at runtime)
 COPY . .
+
+# P2: PHP + Laravel minimal fixture (vendor + php-driver symlink)
+RUN apk add --no-cache \
+        php84 php84-phar php84-mbstring php84-xml php84-curl php84-openssl \
+        php84-tokenizer php84-fileinfo php84-session php84-dom php84-pdo php84-pdo_sqlite \
+        php84-sqlite3 composer \
+    && ln -sf /usr/bin/php84 /usr/bin/php \
+    && cd /src/tests/fixtures/laravel-minimal \
+    && ln -sfn /src/php-driver ./php-driver \
+    && cp -f .env.example .env \
+    && mkdir -p storage/framework/{cache,sessions,views} storage/logs bootstrap/cache database \
+    && touch database/database.sqlite \
+    && chmod -R a+rwX storage bootstrap/cache database \
+    && COMPOSER_ALLOW_SUPERUSER=1 php /usr/bin/composer install --no-interaction --prefer-dist --no-progress \
+    && test -f vendor/autoload.php \
+    && test -f php-driver/bin/octane-rust-worker
+
+ENV NUSA_LARAVEL_FIXTURE=/src/tests/fixtures/laravel-minimal
+
+WORKDIR /src
 RUN rm -f .cargo/config.toml.bak \
     && test -f .cargo/config-alpine.toml \
     && cp -f .cargo/config-alpine.toml .cargo/config.toml \

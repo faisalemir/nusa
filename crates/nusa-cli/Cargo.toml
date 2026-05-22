@@ -29,3 +29,7 @@ tracing.workspace = true
 axum.workspace = true
 notify.workspace = true
 parking_lot.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+nusa-e2e-tests = { path = "../nusa-e2e-tests" }
