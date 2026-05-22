@@ -1,28 +1,37 @@
-# Nusa PHP Runtime Configuration
+# Nusa PHP Runtime configuration
 #
-# Copy this file to config.toml and adjust settings as needed.
-# Environment variables prefixed with NUSA_ override these values.
+# Copy to nusa.toml (or pass --config path to the nusa binary).
+# Environment variables with prefix NUSA_ override these values.
 
-# PHP execution engine: "ffi" | "wasm" | "child"
+# PHP execution engine: "child" | "ffi" | "wasm"
 engine = "child"
 
-# Number of concurrent PHP workers (used as pool size and backpressure limit)
+# Concurrent request limit / backpressure (must be > 0)
 max_workers = 4
 
-# Per-request timeout in milliseconds
+# Per-request timeout (milliseconds)
 timeout_ms = 30000
 
-# Maximum memory per WASM worker (MB, only used when engine = "wasm")
+# WASM sandbox memory cap (MB); only when engine = "wasm"
 wasm_memory_mb = 256
 
 # Virtual filesystem root for PHP scripts
 vfs_root = "/app/public"
 
-# PHP code directory (used by Landlock security rules)
+# Laravel application root (Landlock code_dir)
 code_dir = "/app/public"
 
-# Temporary directory for uploads and sessions
+# Writable temp area (uploads, sessions; Landlock tmp_dir)
 tmp_dir = "/tmp/nusa"
 
-# Enable hot-reload: watch config file for changes
+# Reload config when this file changes
 hot_reload = true
+
+# Octane worker pool size (0 = disabled, Normal mode only via PhpEngine)
+octane_workers = 0
+
+# Recycle worker after this resident memory (MB)
+octane_max_memory_mb = 512
+
+# Recycle worker after this many handled requests
+octane_max_requests = 1000

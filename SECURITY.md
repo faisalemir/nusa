@@ -6,12 +6,17 @@
 - **Audit:** `just audit` is run in CI to visualize unsafe usage.
 
 ## 2. Threat Model
+
+Full detail: [docs/security/threat-model.md](docs/security/threat-model.md).
+
 | Vector | Mitigation | Verification |
 |--------|------------|--------------|
 | **IPC Injection** | Length-prefixed framing, strict schema validation, version handshake | Property-based testing, chaos engineering |
 | **VFS Escape** | Landlock RO FS, strict symlink resolution, per-tenant VFS mounts | Penetration audit, multi-tenant leak suite |
 | **Supply Chain** | Pinned deps, SBOM generation, SLSA provenance, signed releases | `cargo audit/deny`, CI attestation |
 | **Memory Exhaustion** | RSS caps, circuit breaker, backpressure, request size limits | Load testing, OOM simulation |
+
+Contributor security development: [docs/contributor/security-dev.md](docs/contributor/security-dev.md).
 
 ## 3. Compliance Mapping
 - **SOC 2 Type II:** Immutable audit logs, RBAC matrix, incident runbooks.

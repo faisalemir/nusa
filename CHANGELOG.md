@@ -9,7 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-#### Phase 1: Normal Mode MVP
+#### Documentation (P0)
+- Greenfield docs: `docs/public/`, `docs/contributor/`, `docs/ai/`, `docs/README.md`
+- `AGENTS.md` entry point for AI agents
+- Honest [production status](docs/public/production-status.md) (v0.1.0 pre-GA)
+- Expanded public narrative: vision, architecture value, migration story (still accurate on Octane P1 gap)
+
+### Changed
+- `README.md` no longer claims Phase 1–4 complete or fixed 58-test count
+- `config.toml.example` documents Octane keys (`octane_workers`, recycle limits)
+- Migration and runbook moved under `docs/public/`
+
+### Known gaps (documented, not fixed in this release)
+- Gateway HTTP handler still calls `engine.execute` when Octane pool is configured (P1)
+- `/ready` does not fail closed on Octane pool init failure (P1)
+
+#### Phase 1: Normal Mode MVP (historical changelog — verify against code)
 - Static file serving wired — `/static/{*path}` routes to `StaticFileHandler` with LRU cache, MIME types, Cache-Control headers, directory traversal prevention
 - Prometheus metrics endpoint — `/metrics` now renders full Prometheus exposition format from global recorder
 - `NusaMetrics` and `PrometheusHandle` wired into `AppState` for shared access

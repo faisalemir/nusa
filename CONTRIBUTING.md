@@ -33,6 +33,21 @@ Production runs on **Alpine Linux musl**. Tests must not game results for a gree
 - **Stubs:** Document `// STUB_CONTRACT:`; assert expected errors on stub paths; add Alpine integration coverage for real behavior.
 - **Details:** `.cursor/rules/nusa-standards.mdc` → Production Test Integrity; `.cursor/skills/rust-test/SKILL.md`.
 
+## Documentation
+
+Documentation is split by audience:
+
+| Audience | Path |
+|----------|------|
+| Public (deploy/operate) | [`docs/public/`](docs/public/) |
+| Contributor | [`docs/contributor/`](docs/contributor/) |
+| AI agents | [`AGENTS.md`](AGENTS.md) → [`docs/ai/`](docs/ai/) |
+| Index | [`docs/README.md`](docs/README.md) |
+
+- User-facing changes: follow `.cursor/skills/docs-expert/SKILL.md` and verify every command against [`justfile`](justfile) and source code.
+- Do not claim Phase 1–4 “complete” or fixed test counts without `just podman-test-full` evidence.
+- Octane HTTP dispatch is **not** complete until P1 in [`docs/contributor/rfc/production-readiness.md`](docs/contributor/rfc/production-readiness.md).
+
 ## Reporting Issues
 Use the provided issue templates. Include:
 - Rust version (`rustc --version`)
