@@ -1,9 +1,9 @@
-//! Worker pool manager for Octane mode.
+﻿//! Worker pool manager for Octane mode.
 //!
 //! Skills applied:
 //! - `m07-concurrency`: mpsc channels over shared state, JoinSet for lifecycle
 //! - `m03-mutability`: Worker state isolated per process
-//! - `m12-lifecycle`: spawn→handshake→serve→recycle→shutdown
+//! - `m12-lifecycle`: spawnÃ¢â€ â€™handshakeÃ¢â€ â€™serveÃ¢â€ â€™recycleÃ¢â€ â€™shutdown
 //! - `m13-domain-error`: IPC errors vs crash vs timeout distinction
 
 use std::path::PathBuf;
@@ -33,7 +33,7 @@ pub enum WorkerState {
 /// A single PHP worker in the Octane pool.
 ///
 /// m07-concurrency: Worker communicates via IpcTransport.
-/// m12-lifecycle: spawn→handshake→serve→recycle→shutdown.
+/// m12-lifecycle: spawnÃ¢â€ â€™handshakeÃ¢â€ â€™serveÃ¢â€ â€™recycleÃ¢â€ â€™shutdown.
 pub struct Worker {
     pub id: usize,
     pub pid: Option<u32>,
@@ -50,13 +50,17 @@ impl Worker {
     /// On Unix: spawns PHP with Unix socket path.
     /// On non-Unix: spawns PHP worker and connects via TCP on a configurable port.
     #[cfg(unix)]
-    pub async fn spawn(id: usize, app_root: PathBuf, _max_memory_mb: u64) -> Result<Self, WorkerError> {
+    pub async fn spawn(
+        id: usize,
+        app_root: PathBuf,
+        _max_memory_mb: u64,
+    ) -> Result<Self, WorkerError> {
         let socket_dir = app_root.join(".octane");
         tokio::fs::create_dir_all(&socket_dir).await?;
         let socket_path = socket_dir.join(format!("worker-{}.sock", id));
 
         // Spawn PHP worker process
-        let mut child = Command::new("php")
+        let child = Command::new("php")
             .args([
                 app_root
                     .join("php-driver/bin/octane-rust-worker")
@@ -65,7 +69,6 @@ impl Worker {
                 socket_path.to_string_lossy().as_ref(),
             ])
             .current_dir(&app_root)
-            .kill_on_drop(true)
             .spawn()?;
 
         // Wait for socket to appear
@@ -77,9 +80,9 @@ impl Worker {
         }
 
         // Connect via IPC
-        let transport = IpcTransport::connect(socket_path.to_string_lossy().as_ref()).await?;
+        let mut transport = IpcTransport::connect(socket_path.to_string_lossy().as_ref()).await?;
 
-        // Send Hello handshake and wait for Ack (Strategy §A.1: version handshake)
+        // Send Hello handshake and wait for Ack (Strategy Ã‚Â§A.1: version handshake)
         let hello = IpcMessage::Hello {
             version: "1.0".to_string(),
             pid: std::process::id(),
@@ -89,10 +92,7 @@ impl Worker {
         transport.send(hello).await?;
 
         // Wait for Ack with timeout
-        match tokio::time::timeout(
-            std::time::Duration::from_secs(5),
-            transport.recv(),
-        ).await {
+        match tokio::time::timeout(std::time::Duration::from_secs(5), transport.recv()).await {
             Ok(Ok(IpcMessage::Ack)) => {
                 info!("Worker {} handshake complete", id);
             }
@@ -110,7 +110,9 @@ impl Worker {
             }
             Err(_) => {
                 warn!("Worker {} handshake timeout", id);
-                return Err(WorkerError::Handshake("timeout: worker did not respond within 5s".into()));
+                return Err(WorkerError::Handshake(
+                    "timeout: worker did not respond within 5s".into(),
+                ));
             }
         }
 
@@ -119,7 +121,7 @@ impl Worker {
 
         Ok(Self {
             id,
-            pid,
+            pid: Some(pid),
             state: WorkerState::Idle,
             requests_handled: AtomicU64::new(0),
             rss_mb: AtomicU64::new(0),
@@ -130,7 +132,11 @@ impl Worker {
 
     /// Spawn a new PHP worker process and connect via TCP (Windows).
     #[cfg(not(unix))]
-    pub async fn spawn(id: usize, _app_root: PathBuf, _max_memory_mb: u64) -> Result<Self, WorkerError> {
+    pub async fn spawn(
+        id: usize,
+        _app_root: PathBuf,
+        _max_memory_mb: u64,
+    ) -> Result<Self, WorkerError> {
         // On Windows, try to connect to worker via TCP on a pre-assigned port
         let port = 19000 + id as u16; // Each worker gets a unique port
         let addr = format!("127.0.0.1:{}", port);
@@ -161,10 +167,7 @@ impl Worker {
             transport.send(hello).await?;
 
             // Wait for Ack with timeout
-            match tokio::time::timeout(
-                std::time::Duration::from_secs(5),
-                transport.recv(),
-            ).await {
+            match tokio::time::timeout(std::time::Duration::from_secs(5), transport.recv()).await {
                 Ok(Ok(IpcMessage::Ack)) => {
                     info!("Worker {} handshake complete (TCP)", id);
                 }
@@ -182,7 +185,9 @@ impl Worker {
                 }
                 Err(_) => {
                     warn!("Worker {} handshake timeout (TCP)", id);
-                    return Err(WorkerError::Handshake("timeout: worker did not respond within 5s".into()));
+                    return Err(WorkerError::Handshake(
+                        "timeout: worker did not respond within 5s".into(),
+                    ));
                 }
             }
 
@@ -196,9 +201,9 @@ impl Worker {
                 transport: Some(transport),
             })
         } else {
-            // No PHP worker available — fall back to stub mode (useful for testing)
+            // No PHP worker available Ã¢â‚¬â€ fall back to stub mode (useful for testing)
             warn!(
-                "Worker {} stub — no PHP worker available at TCP {}",
+                "Worker {} stub Ã¢â‚¬â€ no PHP worker available at TCP {}",
                 id, addr
             );
             Ok(Self {
@@ -258,7 +263,7 @@ impl Worker {
 /// Worker pool manager for Octane mode.
 ///
 /// m07-concurrency: Uses JoinSet for managing worker lifecycles.
-/// m12-lifecycle: initialize→route→recycle→shutdown.
+/// m12-lifecycle: initializeÃ¢â€ â€™routeÃ¢â€ â€™recycleÃ¢â€ â€™shutdown.
 /// m10-performance: Telemetry-driven recycling based on RSS, error rate, GC pause.
 pub struct WorkerPool {
     workers: Vec<Worker>,

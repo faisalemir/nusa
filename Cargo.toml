@@ -100,8 +100,10 @@ criterion = { version = "0.5", features = ["async_tokio"] }
 # Profile settings
 [profile.release]
 lto = "thin"
-codegen-units = 1
+codegen-units = 4
 strip = "symbols"
 
 [profile.dev]
 split-debuginfo = "packed"
+debug = "line-tables-only"
+incremental = true

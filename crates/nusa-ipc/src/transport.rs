@@ -7,12 +7,14 @@
 
 #[cfg(unix)]
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-#[cfg(unix)]
-use tokio::net::UnixStream;
 #[cfg(not(unix))]
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+#[cfg(unix)]
+use tokio::net::TcpStream;
 #[cfg(not(unix))]
 use tokio::net::TcpStream;
+#[cfg(unix)]
+use tokio::net::UnixStream;
 
 use crate::error::IpcError;
 use crate::protocol::{IpcMessage, RequestId};
@@ -41,8 +43,14 @@ enum TransportStream {
 impl TransportStream {
     async fn read_exact(&mut self, buf: &mut [u8]) -> std::io::Result<()> {
         match self {
-            TransportStream::Unix(s) => s.read_exact(buf).await,
-            TransportStream::Tcp(s) => s.read_exact(buf).await,
+            TransportStream::Unix(s) => {
+                s.read_exact(buf).await?;
+                Ok(())
+            }
+            TransportStream::Tcp(s) => {
+                s.read_exact(buf).await?;
+                Ok(())
+            }
         }
     }
 

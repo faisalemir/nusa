@@ -1,0 +1,11 @@
+target/
+.git/
+.cursor/
+.vscode/
+.idea/
+.mutants.out*/
+docs/plan/
+skills-lock.json
+*.pdb
+*.plan.md
+dockerfiles/

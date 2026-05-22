@@ -1,52 +1,46 @@
-//! Landlock filesystem sandboxing for PHP processes.
-//!
-//! Skills applied:
-//! - `domain-cloud-native`: Minimal privilege principle
-//! - `m15-anti-pattern`: Security enforced before server start
-
 use std::path::Path;
 
-/// Apply Landlock rules to restrict filesystem access.
-///
-/// Rules:
-/// - Read-only access to `code_dir`/`vfs_root`
-/// - Read-write access to `tmp_dir`
-/// - Deny everything else
 #[cfg(target_os = "linux")]
 pub fn apply_landlock_rules(code_dir: &Path, tmp_dir: &Path) -> anyhow::Result<()> {
-    use landlock::{AccessFs, PathBeneath, Ruleset, RulesetAttr, RulesetCreatedAttr};
+    use landlock::{
+        AccessFs, PathBeneath, PathFd, Ruleset, RulesetAttr, RulesetCreatedAttr, RulesetStatus,
+    };
 
     tracing::info!("Applying Landlock: RO={:?}, RW={:?}", code_dir, tmp_dir);
 
-    let ruleset = Ruleset::new()
-        .handle_access(AccessFs::from_file(landlock::Access::READ))?
+    let code_fd = PathFd::new(code_dir)?;
+    let tmp_fd = PathFd::new(tmp_dir)?;
+
+    let status = Ruleset::default()
+        .handle_access(AccessFs::from_read(landlock::ABI::V1))?
+        .handle_access(AccessFs::from_write(landlock::ABI::V1))?
         .create()?
         .add_rule(PathBeneath::new(
-            code_dir,
-            AccessFs::READ_FILE | AccessFs::READ_DIR,
+            code_fd,
+            AccessFs::ReadFile | AccessFs::ReadDir,
         ))?
-        .create()?
-        .restrict_self()?;
-
-    let _ = ruleset;
-
-    // Apply WRITE access to tmp_dir using a separate ruleset
-    let tmp_ruleset = Ruleset::new()
-        .handle_access(AccessFs::from_file(landlock::Access::WRITE))?
-        .create()?
         .add_rule(PathBeneath::new(
-            tmp_dir,
-            AccessFs::WRITE_FILE | AccessFs::READ_FILE | AccessFs::READ_DIR | AccessFs::MAKE_FILE | AccessFs::REMOVE_FILE,
+            tmp_fd,
+            AccessFs::WriteFile
+                | AccessFs::ReadFile
+                | AccessFs::ReadDir
+                | AccessFs::MakeReg
+                | AccessFs::RemoveFile,
         ))?
-        .create()?
         .restrict_self()?;
 
-    let _ = tmp_ruleset;
+    if status.ruleset == RulesetStatus::FullyEnforced {
+        tracing::debug!("Landlock ruleset enforced successfully");
+    } else {
+        tracing::warn!(
+            "Landlock ruleset may not be fully enforced: {:?}",
+            status
+        );
+    }
 
     Ok(())
 }
 
-/// Stub for non-Linux platforms.
 #[cfg(not(target_os = "linux"))]
 pub fn apply_landlock_rules(_code_dir: &Path, _tmp_dir: &Path) -> anyhow::Result<()> {
     tracing::debug!("Landlock not available on this platform, skipping");

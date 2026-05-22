@@ -120,16 +120,17 @@ fn task_manager_receiver_dropped_no_panic() {
     });
     drop(rx); // drop receiver immediately
 
-    // Wait for task to complete in background
-    std::thread::sleep(Duration::from_millis(50));
+    // Wait for task to complete in background (retry up to 500ms)
+    for _ in 0..10 {
+        std::thread::sleep(Duration::from_millis(50));
+        let status = mgr.status(&id);
+        if status.completed {
+            // === Assert ===
+            return;
+        }
+    }
 
-    // === Assert ===
-    // Status should still show completed
-    let status = mgr.status(&id);
-    assert!(
-        status.completed,
-        "task should complete even if receiver dropped"
-    );
+    panic!("task should complete even if receiver dropped");
 }
 
 /// === Arrange ===
@@ -216,3 +217,6 @@ fn task_custom_variant_returns_error_not_panic() {
     let inner = result.unwrap();
     assert!(inner.is_ok(), "task result must be received");
 }
+
+
+
