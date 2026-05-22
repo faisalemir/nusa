@@ -49,7 +49,9 @@ fn file_export_writes_to_disk() {
     // Clean up if exists
     let _ = std::fs::remove_file(&temp_file);
 
-    let backend = ExportBackend::File { path: temp_file.clone() };
+    let backend = ExportBackend::File {
+        path: temp_file.clone(),
+    };
     let exports = vec![BillingExport {
         tenant_id: "file-tenant".to_string(),
         requests: 50,
@@ -78,28 +80,32 @@ fn file_export_appends_to_existing_file() {
     let temp_file = std::env::temp_dir().join("nusa_telemetry_append_test.json");
     let _ = std::fs::remove_file(&temp_file);
 
-    let backend = ExportBackend::File { path: temp_file.clone() };
+    let backend = ExportBackend::File {
+        path: temp_file.clone(),
+    };
     let rt = tokio::runtime::Runtime::new().unwrap();
 
     // First export
-    rt.block_on(backend.export(&vec![BillingExport {
+    rt.block_on(backend.export(&[BillingExport {
         tenant_id: "tenant-1".to_string(),
         requests: 10,
         cpu_ms: 500,
         memory_mb: 32.0,
         bandwidth_bytes: 1024,
         timestamp: "2025-01-01T00:00:00Z".to_string(),
-    }])).unwrap();
+    }]))
+    .unwrap();
 
     // Second export
-    rt.block_on(backend.export(&vec![BillingExport {
+    rt.block_on(backend.export(&[BillingExport {
         tenant_id: "tenant-2".to_string(),
         requests: 20,
         cpu_ms: 1000,
         memory_mb: 64.0,
         bandwidth_bytes: 2048,
         timestamp: "2025-01-01T01:00:00Z".to_string(),
-    }])).unwrap();
+    }]))
+    .unwrap();
 
     let content = std::fs::read_to_string(&temp_file).unwrap();
     // Should contain both records
@@ -117,7 +123,9 @@ fn file_export_empty_is_noop() {
     let temp_file = std::env::temp_dir().join("nusa_telemetry_empty.json");
     let _ = std::fs::remove_file(&temp_file);
 
-    let backend = ExportBackend::File { path: temp_file.clone() };
+    let backend = ExportBackend::File {
+        path: temp_file.clone(),
+    };
     let rt = tokio::runtime::Runtime::new().unwrap();
     let result = rt.block_on(backend.export(&[]));
     assert!(result.is_ok());
@@ -129,7 +137,9 @@ fn file_export_empty_is_noop() {
 
 #[test]
 fn file_export_name_is_file() {
-    let backend = ExportBackend::File { path: "test.json".into() };
+    let backend = ExportBackend::File {
+        path: "test.json".into(),
+    };
     assert_eq!(backend.name(), "file");
 }
 

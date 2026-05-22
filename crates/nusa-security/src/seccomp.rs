@@ -4,20 +4,15 @@
 //! - `domain-cloud-native`: Syscall whitelist for minimal attack surface
 //! - `m15-anti-pattern`: Security enforced before server start
 
-/// Apply Seccomp-BPF syscall filter.
+/// Compile the Seccomp-BPF program without applying it to the current thread.
 ///
-/// Whitelist: read, write, mmap, mprotect, brk, close, fstat, ioctl, epoll_*,
-///            eventfd, accept4, connect, getsockopt, setsockopt, sendto, recvfrom,
-///            clone3, exit, exit_group, futex
-///
-/// Block: ptrace, mount, umount2, reboot, kexec, keyctl, bpf, unshare, pivot_root
+/// Use this from tests; call [`apply_seccomp_filter`] only in child processes or at
+/// process entry before other threads start.
 #[cfg(target_os = "linux")]
-pub fn apply_seccomp_filter() -> anyhow::Result<()> {
-    use seccompiler::{
-        BpfProgram, SeccompAction, SeccompCondition, SeccompFilter, SeccompRule,
-    };
+pub fn build_seccomp_filter() -> anyhow::Result<seccompiler::BpfProgram> {
+    use seccompiler::{SeccompAction, SeccompFilter, SeccompRule};
 
-    tracing::info!("Applying Seccomp-BPF syscall filter");
+    tracing::debug!("Building Seccomp-BPF syscall filter");
 
     // Define allowed syscalls — essential for a PHP runtime
     let allowed_syscalls: Vec<(i64, Vec<SeccompRule>)> = vec![
@@ -33,7 +28,6 @@ pub fn apply_seccomp_filter() -> anyhow::Result<()> {
         (libc::SYS_ioctl, vec![]),
         (libc::SYS_access, vec![]),
         (libc::SYS_faccessat, vec![]),
-
         // Memory
         (libc::SYS_mmap, vec![]),
         (libc::SYS_mprotect, vec![]),
@@ -41,7 +35,6 @@ pub fn apply_seccomp_filter() -> anyhow::Result<()> {
         (libc::SYS_brk, vec![]),
         (libc::SYS_madvise, vec![]),
         (libc::SYS_mremap, vec![]),
-
         // File operations
         (libc::SYS_open, vec![]),
         (libc::SYS_openat, vec![]),
@@ -75,7 +68,6 @@ pub fn apply_seccomp_filter() -> anyhow::Result<()> {
         (libc::SYS_dup3, vec![]),
         (libc::SYS_pipe, vec![]),
         (libc::SYS_pipe2, vec![]),
-
         // Network
         (libc::SYS_socket, vec![]),
         (libc::SYS_connect, vec![]),
@@ -91,7 +83,6 @@ pub fn apply_seccomp_filter() -> anyhow::Result<()> {
         (libc::SYS_getpeername, vec![]),
         (libc::SYS_getsockname, vec![]),
         (libc::SYS_sethostname, vec![]),
-
         // epoll / eventfd
         (libc::SYS_epoll_create, vec![]),
         (libc::SYS_epoll_create1, vec![]),
@@ -100,7 +91,6 @@ pub fn apply_seccomp_filter() -> anyhow::Result<()> {
         (libc::SYS_epoll_pwait, vec![]),
         (libc::SYS_eventfd, vec![]),
         (libc::SYS_eventfd2, vec![]),
-
         // Time
         (libc::SYS_clock_gettime, vec![]),
         (libc::SYS_clock_getres, vec![]),
@@ -110,7 +100,6 @@ pub fn apply_seccomp_filter() -> anyhow::Result<()> {
         (libc::SYS_timerfd_create, vec![]),
         (libc::SYS_timerfd_gettime, vec![]),
         (libc::SYS_timerfd_settime, vec![]),
-
         // Threading / process
         (libc::SYS_clone, vec![]),
         (libc::SYS_clone3, vec![]),
@@ -128,7 +117,6 @@ pub fn apply_seccomp_filter() -> anyhow::Result<()> {
         (libc::SYS_rt_sigprocmask, vec![]),
         (libc::SYS_rt_sigreturn, vec![]),
         (libc::SYS_rt_sigtimedwait, vec![]),
-
         // Misc
         (libc::SYS_getpid, vec![]),
         (libc::SYS_getuid, vec![]),
@@ -162,20 +150,48 @@ pub fn apply_seccomp_filter() -> anyhow::Result<()> {
     )
     .map_err(|e| anyhow::anyhow!("Failed to build seccomp filter: {}", e))?;
 
-    let bpf_filter: BpfProgram = filter
+    filter
         .try_into()
-        .map_err(|e| anyhow::anyhow!("Failed to compile seccomp BPF: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Failed to compile seccomp BPF: {}", e))
+}
 
+/// Apply Seccomp-BPF syscall filter to the **current** process.
+///
+/// Whitelist: read, write, mmap, mprotect, brk, close, fstat, ioctl, epoll_*,
+///            eventfd, accept4, connect, getsockopt, setsockopt, sendto, recvfrom,
+///            clone3, exit, exit_group, futex
+///
+/// Block: ptrace, mount, umount2, reboot, kexec, keyctl, bpf, unshare, pivot_root
+#[cfg(target_os = "linux")]
+pub fn apply_seccomp_filter() -> anyhow::Result<()> {
+    tracing::info!("Applying Seccomp-BPF syscall filter");
+    let bpf_filter = build_seccomp_filter()?;
     seccompiler::apply_filter(&bpf_filter)
         .map_err(|e| anyhow::anyhow!("Failed to apply seccomp filter: {}", e))?;
-
     tracing::info!("Seccomp-BPF syscall filter applied successfully");
+    Ok(())
+}
+
+/// Verify the filter builds on this platform without installing it (safe for unit tests).
+#[cfg(target_os = "linux")]
+pub fn verify_seccomp_filter() -> anyhow::Result<()> {
+    let _ = build_seccomp_filter()?;
     Ok(())
 }
 
 /// Stub for non-Linux platforms.
 #[cfg(not(target_os = "linux"))]
-pub fn apply_seccomp_filter() -> anyhow::Result<()> {
+pub fn build_seccomp_filter() -> anyhow::Result<()> {
     tracing::debug!("Seccomp not available on this platform, skipping");
     Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn apply_seccomp_filter() -> anyhow::Result<()> {
+    build_seccomp_filter()
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn verify_seccomp_filter() -> anyhow::Result<()> {
+    build_seccomp_filter()
 }

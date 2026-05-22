@@ -21,10 +21,9 @@ async fn state_reset_orchestrator_request_received_increments() {
     let mut orchestrator = StateResetOrchestrator::new(128);
     orchestrator.initialize();
 
-    orchestrator
-        .emit_event(OctaneEvent::RequestReceived {
-            request_id: "req-1".to_string(),
-        });
+    orchestrator.emit_event(OctaneEvent::RequestReceived {
+        request_id: "req-1".to_string(),
+    });
 
     let stats = orchestrator.stats();
     assert_eq!(stats.total_requests_processed, 1);
@@ -36,11 +35,10 @@ async fn state_reset_orchestrator_request_terminated_increments_resets() {
     let mut orchestrator = StateResetOrchestrator::new(128);
     orchestrator.initialize();
 
-    orchestrator
-        .emit_event(OctaneEvent::RequestTerminated {
-            request_id: "req-1".to_string(),
-            status: 200,
-        });
+    orchestrator.emit_event(OctaneEvent::RequestTerminated {
+        request_id: "req-1".to_string(),
+        status: 200,
+    });
 
     let stats = orchestrator.stats();
     assert_eq!(stats.total_resets_performed, 1);
@@ -52,8 +50,7 @@ async fn state_reset_orchestrator_worker_stopping_increments_stops() {
     let mut orchestrator = StateResetOrchestrator::new(128);
     orchestrator.initialize();
 
-    orchestrator
-        .emit_event(OctaneEvent::WorkerStopping { worker_id: 0 });
+    orchestrator.emit_event(OctaneEvent::WorkerStopping { worker_id: 0 });
 
     let stats = orchestrator.stats();
     assert_eq!(stats.total_worker_stops, 1);
@@ -66,25 +63,22 @@ async fn state_reset_orchestrator_multiple_events_accumulate() {
 
     // 5 requests received
     for i in 0..5 {
-        orchestrator
-            .emit_event(OctaneEvent::RequestReceived {
-                request_id: format!("req-{}", i),
-            });
+        orchestrator.emit_event(OctaneEvent::RequestReceived {
+            request_id: format!("req-{}", i),
+        });
     }
 
     // 3 requests terminated
     for i in 0..3 {
-        orchestrator
-            .emit_event(OctaneEvent::RequestTerminated {
-                request_id: format!("req-{}", i),
-                status: 200,
-            });
+        orchestrator.emit_event(OctaneEvent::RequestTerminated {
+            request_id: format!("req-{}", i),
+            status: 200,
+        });
     }
 
     // 2 workers stopping
     for i in 0..2 {
-        orchestrator
-            .emit_event(OctaneEvent::WorkerStopping { worker_id: i });
+        orchestrator.emit_event(OctaneEvent::WorkerStopping { worker_id: i });
     }
 
     let stats = orchestrator.stats();
@@ -101,10 +95,9 @@ async fn state_reset_orchestrator_broadcast_subscribers_receive() {
 
     let mut subscriber = orchestrator.subscribe();
 
-    orchestrator
-        .emit_event(OctaneEvent::RequestReceived {
-            request_id: "req-broadcast".to_string(),
-        });
+    orchestrator.emit_event(OctaneEvent::RequestReceived {
+        request_id: "req-broadcast".to_string(),
+    });
 
     let received = tokio::time::timeout(Duration::from_millis(100), subscriber.recv())
         .await
@@ -131,10 +124,9 @@ async fn state_reset_orchestrator_custom_action_executed() {
         counter_clone.fetch_add(1, Ordering::SeqCst);
     });
 
-    orchestrator
-        .emit_event(OctaneEvent::RequestReceived {
-            request_id: "req-custom".to_string(),
-        });
+    orchestrator.emit_event(OctaneEvent::RequestReceived {
+        request_id: "req-custom".to_string(),
+    });
 
     assert_eq!(counter.load(Ordering::SeqCst), 1);
 }
@@ -182,16 +174,15 @@ async fn state_reset_orchestrator_multiple_subscribers() {
     let mut sub2 = orchestrator.subscribe();
     let mut sub3 = orchestrator.subscribe();
 
-    orchestrator
-        .emit_event(OctaneEvent::RequestReceived {
-            request_id: "req-multi".to_string(),
-        });
+    orchestrator.emit_event(OctaneEvent::RequestReceived {
+        request_id: "req-multi".to_string(),
+    });
 
     // All subscribers should receive
     for (i, sub) in [&mut sub1, &mut sub2, &mut sub3].iter_mut().enumerate() {
         let received = tokio::time::timeout(Duration::from_millis(100), sub.recv())
             .await
-            .expect(format!("subscriber {} timeout", i).as_str())
+            .unwrap_or_else(|_| panic!("subscriber {i} timeout"))
             .expect("channel closed");
         assert!(matches!(received, OctaneEvent::RequestReceived { .. }));
     }

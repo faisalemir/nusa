@@ -1,6 +1,8 @@
 //! Extended stress tests for nusa-octane-worker pool.
 //!
-//! Covers: pool boundary values, concurrent operations, worker lifecycle edge cases.
+//! Uses the real `WorkerPool::initialize` / `Worker::spawn` paths (same as production).
+//! When no PHP Octane worker is listening, Windows falls back to stub workers after a
+//! bounded TCP probe; Unix fails fast if `app_root` is missing or the worker socket never appears.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -11,22 +13,31 @@ use tokio::sync::Mutex;
 
 use nusa_octane_worker::pool::{Worker, WorkerPool, WorkerState};
 
+/// Writable app root that exists (required by production spawn); PHP worker may still be absent.
+fn test_app_root() -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("nusa_octane_app_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("test app_root must exist");
+    dir
+}
+
 // ── Pool Boundary Values ──
 
 #[tokio::test]
 async fn pool_single_worker() {
-    let mut pool = WorkerPool::new(1, PathBuf::from("/tmp/test"), 512, 1000);
-    let result = pool.initialize().await;
-    assert!(result.is_ok());
+    let mut pool = WorkerPool::new(1, test_app_root(), 512, 1000);
+    pool.initialize()
+        .await
+        .expect("production initialize path must succeed or stub-fallback");
     assert_eq!(pool.worker_count(), 1);
     assert_eq!(pool.idle_count(), 1);
 }
 
 #[tokio::test]
 async fn pool_many_workers() {
-    let mut pool = WorkerPool::new(50, PathBuf::from("/tmp/test"), 512, 1000);
-    let result = pool.initialize().await;
-    assert!(result.is_ok());
+    let mut pool = WorkerPool::new(50, test_app_root(), 512, 1000);
+    pool.initialize()
+        .await
+        .expect("production initialize path must succeed or stub-fallback");
     assert_eq!(pool.worker_count(), 50);
     assert_eq!(pool.idle_count(), 50);
 }
@@ -35,9 +46,9 @@ async fn pool_many_workers() {
 
 #[tokio::test]
 async fn worker_stop_idempotent() {
-    let mut worker = Worker::spawn(0, PathBuf::from("/tmp/test"), 512)
+    let mut worker = Worker::spawn(0, test_app_root(), 512)
         .await
-        .unwrap();
+        .expect("production spawn path");
 
     assert!(worker.stop().await.is_ok());
     assert_eq!(worker.state, WorkerState::Stopped);
@@ -49,9 +60,9 @@ async fn worker_stop_idempotent() {
 
 #[tokio::test]
 async fn worker_should_recycle_exact_boundary() {
-    let worker = Worker::spawn(0, PathBuf::from("/tmp/test"), 512)
+    let worker = Worker::spawn(0, test_app_root(), 512)
         .await
-        .unwrap();
+        .expect("production spawn path");
 
     // Exactly at max_requests
     worker.requests_handled.store(1000, Ordering::SeqCst);
@@ -72,9 +83,9 @@ async fn worker_should_recycle_exact_boundary() {
 
 #[tokio::test]
 async fn worker_stop_transitions_from_busy() {
-    let mut worker = Worker::spawn(0, PathBuf::from("/tmp/test"), 512)
+    let mut worker = Worker::spawn(0, test_app_root(), 512)
         .await
-        .unwrap();
+        .expect("production spawn path");
 
     worker.state = WorkerState::Busy;
     assert!(worker.stop().await.is_ok());
@@ -85,24 +96,24 @@ async fn worker_stop_transitions_from_busy() {
 
 #[tokio::test]
 async fn pool_rapid_initialize_shutdown() {
+    let app_root = test_app_root();
     for _ in 0..10 {
-        let mut pool = WorkerPool::new(2, PathBuf::from("/tmp/test"), 512, 1000);
-        pool.initialize().await.unwrap();
-        pool.shutdown().await.unwrap();
+        let mut pool = WorkerPool::new(2, app_root.clone(), 512, 1000);
+        pool.initialize().await.expect("production initialize path");
+        pool.shutdown().await.expect("production shutdown path");
         assert_eq!(pool.worker_count(), 0);
     }
 }
 
 #[tokio::test]
 async fn pool_concurrent_get_idle_and_return() {
-    let pool = Arc::new(Mutex::new(WorkerPool::new(
-        4,
-        PathBuf::from("/tmp/test"),
-        512,
-        1000,
-    )));
+    let pool = Arc::new(Mutex::new(WorkerPool::new(4, test_app_root(), 512, 1000)));
 
-    pool.lock().await.initialize().await.unwrap();
+    pool.lock()
+        .await
+        .initialize()
+        .await
+        .expect("production initialize path");
 
     // Get all workers concurrently — count how many succeed
     let success_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
@@ -120,7 +131,7 @@ async fn pool_concurrent_get_idle_and_return() {
     }
 
     for h in handles {
-        h.await.unwrap();
+        h.await.expect("concurrent get_idle task");
     }
 
     let got_count = success_count.load(std::sync::atomic::Ordering::SeqCst);
@@ -129,8 +140,8 @@ async fn pool_concurrent_get_idle_and_return() {
 
 #[tokio::test]
 async fn pool_recycle_multiple_times_same_worker() {
-    let mut pool = WorkerPool::new(1, PathBuf::from("/tmp/test"), 512, 1000);
-    pool.initialize().await.unwrap();
+    let mut pool = WorkerPool::new(1, test_app_root(), 512, 1000);
+    pool.initialize().await.expect("production initialize path");
 
     for i in 0..5 {
         let result = pool.recycle_worker(0).await;
@@ -142,13 +153,17 @@ async fn pool_recycle_multiple_times_same_worker() {
 
 #[tokio::test]
 async fn pool_shutdown_after_recycle() {
-    let mut pool = WorkerPool::new(3, PathBuf::from("/tmp/test"), 512, 1000);
-    pool.initialize().await.unwrap();
+    let mut pool = WorkerPool::new(3, test_app_root(), 512, 1000);
+    pool.initialize().await.expect("production initialize path");
 
-    pool.recycle_worker(0).await.unwrap();
-    pool.recycle_worker(1).await.unwrap();
+    pool.recycle_worker(0)
+        .await
+        .expect("production recycle path");
+    pool.recycle_worker(1)
+        .await
+        .expect("production recycle path");
 
-    pool.shutdown().await.unwrap();
+    pool.shutdown().await.expect("production shutdown path");
     assert_eq!(pool.worker_count(), 0);
 }
 
@@ -242,9 +257,9 @@ async fn orchestrator_multiple_actions_same_event() {
 
 #[tokio::test]
 async fn worker_handle_request_stub_error_message() {
-    let mut worker = Worker::spawn(0, PathBuf::from("/tmp/test"), 512)
+    let mut worker = Worker::spawn(0, test_app_root(), 512)
         .await
-        .unwrap();
+        .expect("production spawn path");
 
     let result = worker.handle_request("GET".into(), "/".into(), 5000).await;
 
@@ -256,19 +271,22 @@ async fn worker_handle_request_stub_error_message() {
 
 #[tokio::test]
 async fn worker_handle_request_various_methods() {
-    // On stub workers, all methods should fail the same way
+    // Reuse one production-spawned worker (typical Octane request dispatch).
     let methods = ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"];
+    let mut worker = Worker::spawn(0, test_app_root(), 512)
+        .await
+        .expect("production spawn path");
 
     for method in methods {
-        let mut worker = Worker::spawn(0, PathBuf::from("/tmp/test"), 512)
-            .await
-            .unwrap();
-
         let result = worker
             .handle_request(method.to_string(), "/test".into(), 5000)
             .await;
 
-        assert!(result.is_err(), "method {} should fail on stub", method);
+        assert!(
+            result.is_err(),
+            "method {} should fail without live transport",
+            method
+        );
     }
 }
 
@@ -284,16 +302,20 @@ async fn worker_handle_request_various_uris() {
         "/path#fragment",
     ];
 
-    for uri in uris {
-        let mut worker = Worker::spawn(0, PathBuf::from("/tmp/test"), 512)
-            .await
-            .unwrap();
+    let mut worker = Worker::spawn(0, test_app_root(), 512)
+        .await
+        .expect("production spawn path");
 
+    for uri in uris {
         let result = worker
             .handle_request("GET".into(), uri.to_string(), 5000)
             .await;
 
-        assert!(result.is_err(), "uri {} should fail on stub", uri);
+        assert!(
+            result.is_err(),
+            "uri {} should fail without live transport",
+            uri
+        );
     }
 }
 
@@ -409,7 +431,7 @@ async fn orchestrator_concurrent_events_from_multiple_sources() {
         let orch = orchestrator.clone();
         handles.push(tokio::spawn(async move {
             for i in 0..20 {
-                let o = orch.lock().unwrap();
+                let o = orch.lock().expect("orchestrator lock");
                 o.emit_event(OctaneEvent::RequestReceived {
                     request_id: format!("source-{}-event-{}", source, i),
                 });
@@ -418,9 +440,9 @@ async fn orchestrator_concurrent_events_from_multiple_sources() {
     }
 
     for h in handles {
-        h.await.unwrap();
+        h.await.expect("concurrent orchestrator task");
     }
 
-    let stats = orchestrator.lock().unwrap().stats();
+    let stats = orchestrator.lock().expect("orchestrator lock").stats();
     assert_eq!(stats.total_requests_processed, 100);
 }

@@ -112,7 +112,7 @@ fn tenant_id_100k_creations_no_leak() {
     // === Arrange & Act ===
     let mut ids = vec![];
     for i in 0..100_000 {
-        ids.push(TenantId::new(&format!("tenant-{}", i)));
+        ids.push(TenantId::new(format!("tenant-{}", i)));
     }
 
     // === Assert ===

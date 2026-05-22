@@ -12,12 +12,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use parking_lot::Mutex;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
 use tracing::{info, warn};
 
 /// Billing export record per tenant.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BillingExport {
     pub tenant_id: String,
     pub requests: u64,
@@ -122,8 +122,24 @@ impl TelemetryExport {
         Self::new(export_interval_secs, ExportBackend::Console)
     }
 
+    /// Request count for a tenant (test / diagnostics).
+    #[doc(hidden)]
+    pub fn tenant_request_count(&self, tenant_id: &str) -> u64 {
+        self.tenant_stats
+            .lock()
+            .get(tenant_id)
+            .map(|m| m.requests)
+            .unwrap_or(0)
+    }
+
     /// Record a request metric for a tenant (m07-concurrency).
-    pub fn record_request(&self, tenant_id: &str, duration_ms: u64, memory_mb: f64, response_bytes: u64) {
+    pub fn record_request(
+        &self,
+        tenant_id: &str,
+        duration_ms: u64,
+        memory_mb: f64,
+        response_bytes: u64,
+    ) {
         let mut stats = self.tenant_stats.lock();
         let metric = stats.entry(tenant_id.to_string()).or_default();
         metric.requests += 1;
@@ -145,10 +161,10 @@ impl TelemetryExport {
                 tokio::select! {
                     _ = tokio::time::sleep(interval) => {
                         let exports = Self::generate_exports(&stats);
-                        if !exports.is_empty() {
-                            if let Err(e) = backend.export(&exports).await {
-                                warn!(backend = backend.name(), err = %e, "Telemetry export failed");
-                            }
+                        if !exports.is_empty()
+                            && let Err(e) = backend.export(&exports).await
+                        {
+                            warn!(backend = backend.name(), err = %e, "Telemetry export failed");
                         }
                         // Clear stats after export
                         stats.lock().clear();

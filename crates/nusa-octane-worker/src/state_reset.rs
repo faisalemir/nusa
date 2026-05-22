@@ -6,8 +6,8 @@
 //! - `m09-domain`: Domain events reflect Octane's contract (RequestReceived, WorkerStopping)
 //! - `m07-concurrency`: AtomicU64 for lock-free statistics counters
 
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use tracing::info;
 
@@ -136,7 +136,10 @@ impl StateResetOrchestrator {
         // RequestTerminated: rollback active DB transactions, release connections
         self.register_action("request_terminated".to_string(), |event| {
             if let OctaneEvent::RequestTerminated { request_id, status } = event {
-                info!(request_id, status, "octane: rolling back transactions, releasing DB connections");
+                info!(
+                    request_id,
+                    status, "octane: rolling back transactions, releasing DB connections"
+                );
                 // In production: rollback any open DB transactions,
                 // return connections to pool, clear superglobals
             }
@@ -145,7 +148,10 @@ impl StateResetOrchestrator {
         // WorkerStopping: final cleanup before worker exits
         self.register_action("worker_stopping".to_string(), |event| {
             if let OctaneEvent::WorkerStopping { worker_id } = event {
-                info!(worker_id, "octane: final worker cleanup — closing persistent connections");
+                info!(
+                    worker_id,
+                    "octane: final worker cleanup — closing persistent connections"
+                );
                 // In production: close all persistent connections,
                 // flush remaining buffers, clear tmp files
             }

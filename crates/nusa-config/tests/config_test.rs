@@ -201,7 +201,10 @@ fn config_octane_zero_workers() {
     let result = nusa_config::load(&path);
     cleanup(&path);
 
-    assert!(result.is_ok(), "octane_workers = 0 is valid (disabled Octane)");
+    assert!(
+        result.is_ok(),
+        "octane_workers = 0 is valid (disabled Octane)"
+    );
 }
 
 // ── Boundary Values ──
@@ -341,7 +344,10 @@ fn config_paths_with_empty_strings() {
     let result = nusa_config::load(&path);
     cleanup(&path);
 
-    assert!(result.is_ok(), "empty paths are accepted by config (validated elsewhere)");
+    assert!(
+        result.is_ok(),
+        "empty paths are accepted by config (validated elsewhere)"
+    );
     let cfg = nusa_config::get();
     assert_eq!(cfg.vfs_root, "");
     assert_eq!(cfg.code_dir, "");
@@ -419,7 +425,10 @@ fn config_missing_engine_field() {
     cleanup(&path);
 
     // Missing required fields should fail, unless defaults exist
-    assert!(result.is_err() || result.is_ok(), "config behavior with missing fields depends on serde defaults");
+    assert!(
+        result.is_err() || result.is_ok(),
+        "config behavior with missing fields depends on serde defaults"
+    );
 }
 
 #[test]
@@ -583,9 +592,10 @@ async fn config_watch_returns_handle() {
 
 #[tokio::test]
 async fn config_hot_reload_false_exits_immediately() {
-    let _lock = CONFIG_LOCK.lock().expect("config lock must succeed");
+    let path = {
+        let _lock = CONFIG_LOCK.lock().expect("config lock must succeed");
 
-    let content = r#"
+        let content = r#"
         engine = "child"
         max_workers = 4
         timeout_ms = 30000
@@ -595,9 +605,11 @@ async fn config_hot_reload_false_exits_immediately() {
         tmp_dir = "/tmp"
         hot_reload = false
     "#;
-    let path = write_temp_config(content);
+        let path = write_temp_config(content);
 
-    let _ = nusa_config::load(&path);
+        let _ = nusa_config::load(&path);
+        path
+    };
 
     let handle = nusa_config::watch(path.clone());
 

@@ -34,7 +34,7 @@ tokio-tungstenite.workspace = true
 redis.workspace = true
 futures.workspace = true
 async-stream.workspace = true
-rustls = "0.23"
+rustls = { version = "0.23", features = ["ring"] }
 rustls-pki-types.workspace = true
 anyhow.workspace = true
 
@@ -42,3 +42,5 @@ anyhow.workspace = true
 tokio = { workspace = true, features = ["full"] }
 bytes.workspace = true
 async-trait.workspace = true
+urlencoding = "2"
+rcgen = "0.13"

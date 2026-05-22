@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use parking_lot::Mutex;
@@ -56,6 +56,19 @@ struct StoredTask {
     result: Option<TaskResult>,
 }
 
+/// Shared runtime for offloaded work when no Tokio handle is installed (avoids per-task runtimes).
+static OFFLOAD_RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
+
+fn shared_offload_runtime() -> &'static tokio::runtime::Runtime {
+    OFFLOAD_RUNTIME.get_or_init(|| {
+        tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_all()
+            .build()
+            .expect("failed to build shared offload runtime")
+    })
+}
+
 /// Task manager for async offloading (D1: actual execution).
 pub struct TaskManager {
     pending: Arc<Mutex<HashMap<String, oneshot::Sender<TaskResult>>>>,
@@ -96,14 +109,8 @@ impl TaskManager {
                 complete_task(&completed_store, &pending, &task_id_clone, result);
             });
         } else {
-            // No runtime — spawn a thread for sync execution
-            // For async tasks, create a single-threaded runtime
-            std::thread::spawn(move || {
-                let rt = tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()
-                    .expect("failed to build tokio runtime");
-                let result = rt.block_on(execute_task(task));
+            shared_offload_runtime().spawn(async move {
+                let result = execute_task(task).await;
                 complete_task(&completed_store, &pending, &task_id_clone, result);
             });
         }

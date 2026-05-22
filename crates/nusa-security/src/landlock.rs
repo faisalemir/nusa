@@ -32,10 +32,7 @@ pub fn apply_landlock_rules(code_dir: &Path, tmp_dir: &Path) -> anyhow::Result<(
     if status.ruleset == RulesetStatus::FullyEnforced {
         tracing::debug!("Landlock ruleset enforced successfully");
     } else {
-        tracing::warn!(
-            "Landlock ruleset may not be fully enforced: {:?}",
-            status
-        );
+        tracing::warn!("Landlock ruleset may not be fully enforced: {:?}", status);
     }
 
     Ok(())

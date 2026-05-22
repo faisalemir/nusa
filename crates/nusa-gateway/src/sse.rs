@@ -7,6 +7,7 @@
 //! - `m13-domain-error`: Graceful handling of lagged/closed channels
 
 use std::convert::Infallible;
+use std::pin::Pin;
 
 use axum::response::sse::Event;
 use futures::stream::Stream;
@@ -28,12 +29,17 @@ impl SseManager {
         Self { sender }
     }
 
+    /// Subscribe to the broadcast channel for testing purposes.
+    pub fn subscribe(&self) -> broadcast::Receiver<String> {
+        self.sender.subscribe()
+    }
+
     /// Get an SSE event stream (domain-web).
-    pub fn stream(&self) -> impl Stream<Item = Result<Event, Infallible>> + use<> {
+    pub fn stream(&self) -> Pin<Box<dyn Stream<Item = Result<Event, Infallible>> + Send>> {
         let mut rx = self.sender.subscribe();
 
         // m13-domain-error: Handle lagged/closed channels gracefully
-        async_stream::stream! {
+        Box::pin(async_stream::stream! {
             loop {
                 match rx.recv().await {
                     Ok(data) => {
@@ -46,12 +52,17 @@ impl SseManager {
                     Err(broadcast::error::RecvError::Closed) => break,
                 }
             }
-        }
+        })
     }
 
     /// Send an event to all SSE subscribers (domain-web).
     pub fn send(&self, event: &str) {
         let _ = self.sender.send(event.to_string());
+    }
+
+    /// Number of active subscribers.
+    pub fn subscriber_count(&self) -> usize {
+        self.sender.receiver_count()
     }
 }
 

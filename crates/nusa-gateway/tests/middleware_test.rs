@@ -65,14 +65,14 @@ fn extract_trace_id_from_traceparent_header() {
         HeaderValue::from_static("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"),
     );
     let trace_id = extract_trace_id(&headers);
-    assert!(trace_id.to_string().len() > 0);
+    assert!(!trace_id.to_string().is_empty());
 }
 
 #[test]
 fn extract_trace_id_returns_new_when_no_header() {
     let headers = HeaderMap::new();
     let trace_id = extract_trace_id(&headers);
-    assert!(trace_id.to_string().len() > 0);
+    assert!(!trace_id.to_string().is_empty());
 }
 
 #[test]
@@ -80,7 +80,7 @@ fn extract_trace_id_returns_new_for_malformed_header() {
     let mut headers = HeaderMap::new();
     headers.insert("traceparent", HeaderValue::from_static("invalid"));
     let trace_id = extract_trace_id(&headers);
-    assert!(trace_id.to_string().len() > 0);
+    assert!(!trace_id.to_string().is_empty());
 }
 
 // ── Request Size Limit ──
@@ -231,7 +231,7 @@ fn decision_table_trace_id_pairwise() {
 
         let result = extract_trace_id(&headers);
         assert!(
-            result.to_string().len() > 0,
+            !result.to_string().is_empty(),
             "case '{}' should always produce a trace ID",
             desc
         );

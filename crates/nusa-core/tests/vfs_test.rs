@@ -195,7 +195,7 @@ fn vfs_resolve_dot_path() {
 fn vfs_long_tenant_id() {
     // === Arrange ===
     let vfs = DefaultTenantVfs::new(PathBuf::from("/tmp/nusa-test"));
-    let tenant = TenantId::new(&"a".repeat(255));
+    let tenant = TenantId::new("a".repeat(255));
 
     // === Act ===
     let result = vfs.resolve_path(&tenant, "file.txt");

@@ -4,8 +4,8 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use nusa_cli::dev::DevWatcher;
 use notify::Event;
+use nusa_cli::dev::DevWatcher;
 use tokio::sync::mpsc;
 
 #[tokio::test]
@@ -137,7 +137,9 @@ async fn dev_watcher_app_code_change_detected() {
         kind: notify::EventKind::Modify(notify::event::ModifyKind::Data(
             notify::event::DataChange::Any,
         )),
-        paths: vec![PathBuf::from("/app/app/Http/Controllers/TestController.php")],
+        paths: vec![PathBuf::from(
+            "/app/app/Http/Controllers/TestController.php",
+        )],
         attrs: Default::default(),
     };
 
@@ -162,7 +164,13 @@ async fn dev_watcher_view_change_detected() {
 #[tokio::test]
 async fn dev_watcher_ignored_dirs_skipped() {
     let (action_tx, _) = tokio::sync::broadcast::channel(32);
-    for dir in &["vendor", "node_modules", ".git", "storage", "bootstrap/cache"] {
+    for dir in &[
+        "vendor",
+        "node_modules",
+        ".git",
+        "storage",
+        "bootstrap/cache",
+    ] {
         let event = Event {
             kind: notify::EventKind::Modify(notify::event::ModifyKind::Data(
                 notify::event::DataChange::Any,

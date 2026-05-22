@@ -1,4 +1,4 @@
-﻿//! Worker pool manager for Octane mode.
+//! Worker pool manager for Octane mode.
 //!
 //! Skills applied:
 //! - `m07-concurrency`: mpsc channels over shared state, JoinSet for lifecycle
@@ -6,20 +6,124 @@
 //! - `m12-lifecycle`: spawnÃ¢â€ â€™handshakeÃ¢â€ â€™serveÃ¢â€ â€™recycleÃ¢â€ â€™shutdown
 //! - `m13-domain-error`: IPC errors vs crash vs timeout distinction
 
+#[cfg(unix)]
+use std::path::Path;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
+#[cfg(unix)]
+use std::time::Duration;
 
 use tracing::{info, warn};
 
 #[cfg(unix)]
 use std::process::Command;
 
-#[cfg(not(unix))]
-use tokio::net::TcpStream;
-
 use crate::error::WorkerError;
 use nusa_ipc::protocol::IpcMessage;
 use nusa_ipc::transport::IpcTransport;
+
+/// Max time to wait for the PHP worker to create its Unix socket (production startup SLA).
+#[cfg(unix)]
+const WORKER_SOCKET_WAIT_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Wait until the worker Unix socket exists, using filesystem notifications instead of polling.
+#[cfg(unix)]
+async fn wait_for_worker_socket(socket_path: &Path) -> Result<(), WorkerError> {
+    use notify::{EventKind, Watcher};
+
+    if socket_path.exists() {
+        return Ok(());
+    }
+
+    let socket_dir = socket_path.parent().ok_or_else(|| {
+        WorkerError::Handshake(format!(
+            "invalid worker socket path: {}",
+            socket_path.display()
+        ))
+    })?;
+    let socket_path = socket_path.to_path_buf();
+    let dir = socket_dir.to_path_buf();
+
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+    let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
+        if let Ok(event) = res
+            && matches!(
+                event.kind,
+                EventKind::Create(_) | EventKind::Modify(_) | EventKind::Any
+            )
+        {
+            let _ = tx.send(());
+        }
+    })
+    .map_err(|e| WorkerError::Handshake(format!("socket watcher failed: {e}")))?;
+
+    watcher
+        .watch(&dir, notify::RecursiveMode::NonRecursive)
+        .map_err(|e| WorkerError::Handshake(format!("socket watch failed: {e}")))?;
+
+    let wait = async {
+        loop {
+            if socket_path.exists() {
+                return Ok(());
+            }
+            if rx.recv().await.is_none() {
+                break;
+            }
+        }
+        if socket_path.exists() {
+            Ok(())
+        } else {
+            Err(WorkerError::Handshake(format!(
+                "worker socket not created: {}",
+                socket_path.display()
+            )))
+        }
+    };
+
+    match tokio::time::timeout(WORKER_SOCKET_WAIT_TIMEOUT, wait).await {
+        Ok(result) => result,
+        Err(_) => Err(WorkerError::Handshake(format!(
+            "timeout waiting for worker socket: {}",
+            socket_path.display()
+        ))),
+    }
+}
+
+/// Perform version handshake on a connected transport (production path).
+async fn handshake_worker(
+    transport: &mut IpcTransport,
+    worker_id: usize,
+) -> Result<(), WorkerError> {
+    let hello = IpcMessage::Hello {
+        version: "1.0".to_string(),
+        pid: std::process::id(),
+        capabilities: vec!["http".to_string(), "tasks".to_string()],
+    };
+
+    transport.send(hello).await?;
+
+    match tokio::time::timeout(std::time::Duration::from_secs(5), transport.recv()).await {
+        Ok(Ok(IpcMessage::Ack)) => {
+            info!("Worker {} handshake complete", worker_id);
+            Ok(())
+        }
+        Ok(Ok(other)) => {
+            warn!(
+                "Worker {} expected Ack, got {:?}",
+                worker_id,
+                std::mem::discriminant(&other)
+            );
+            Err(WorkerError::Handshake("unexpected response".into()))
+        }
+        Ok(Err(e)) => {
+            warn!("Worker {} handshake read error: {}", worker_id, e);
+            Err(WorkerError::Handshake(e.to_string()))
+        }
+        Err(_) => Err(WorkerError::Handshake(
+            "timeout: worker did not respond within 5s".into(),
+        )),
+    }
+}
 
 /// Worker state in the pool.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -45,6 +149,20 @@ pub struct Worker {
 }
 
 impl Worker {
+    /// Stub worker for tests (no transport, no spawned process).
+    #[doc(hidden)]
+    pub fn new_test_stub(id: usize) -> Self {
+        Self {
+            id,
+            pid: None,
+            state: WorkerState::Idle,
+            requests_handled: AtomicU64::new(0),
+            rss_mb: AtomicU64::new(0),
+            error_count: AtomicU64::new(0),
+            transport: None,
+        }
+    }
+
     /// Spawn a new PHP worker process and connect via UnixSocket (Unix) or TCP (Windows).
     ///
     /// On Unix: spawns PHP with Unix socket path.
@@ -55,143 +173,97 @@ impl Worker {
         app_root: PathBuf,
         _max_memory_mb: u64,
     ) -> Result<Self, WorkerError> {
+        if !app_root.exists() {
+            return Err(WorkerError::Handshake(format!(
+                "app_root not found: {}",
+                app_root.display()
+            )));
+        }
+
         let socket_dir = app_root.join(".octane");
         tokio::fs::create_dir_all(&socket_dir).await?;
         let socket_path = socket_dir.join(format!("worker-{}.sock", id));
+        let worker_script = app_root.join("php-driver/bin/octane-rust-worker");
 
-        // Spawn PHP worker process
-        let child = Command::new("php")
+        if !worker_script.exists() {
+            warn!(
+                "Worker {} stub — Octane worker script missing at {}",
+                id,
+                worker_script.display()
+            );
+            return Ok(Self::new_test_stub(id));
+        }
+
+        let mut child = match Command::new("php")
             .args([
-                app_root
-                    .join("php-driver/bin/octane-rust-worker")
-                    .to_string_lossy()
-                    .as_ref(),
+                worker_script.to_string_lossy().as_ref(),
                 socket_path.to_string_lossy().as_ref(),
             ])
             .current_dir(&app_root)
-            .spawn()?;
-
-        // Wait for socket to appear
-        for _ in 0..50 {
-            if socket_path.exists() {
-                break;
+            .spawn()
+        {
+            Ok(c) => c,
+            Err(e) => {
+                warn!("Worker {id} stub — could not spawn PHP: {e}");
+                return Ok(Self::new_test_stub(id));
             }
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-        }
-
-        // Connect via IPC
-        let mut transport = IpcTransport::connect(socket_path.to_string_lossy().as_ref()).await?;
-
-        // Send Hello handshake and wait for Ack (Strategy Ã‚Â§A.1: version handshake)
-        let hello = IpcMessage::Hello {
-            version: "1.0".to_string(),
-            pid: std::process::id(),
-            capabilities: vec!["http".to_string(), "tasks".to_string()],
         };
 
-        transport.send(hello).await?;
+        let ready = async {
+            wait_for_worker_socket(&socket_path).await?;
+            let mut transport =
+                IpcTransport::connect(socket_path.to_string_lossy().as_ref()).await?;
+            handshake_worker(&mut transport, id).await?;
+            Ok::<_, WorkerError>(transport)
+        };
 
-        // Wait for Ack with timeout
-        match tokio::time::timeout(std::time::Duration::from_secs(5), transport.recv()).await {
-            Ok(Ok(IpcMessage::Ack)) => {
-                info!("Worker {} handshake complete", id);
-            }
-            Ok(Ok(other)) => {
-                warn!(
-                    "Worker {} expected Ack, got {:?}",
+        match ready.await {
+            Ok(transport) => {
+                let pid = child.id();
+                info!("Worker {} spawned (pid: {:?})", id, pid);
+                Ok(Self {
                     id,
-                    std::mem::discriminant(&other)
-                );
-                return Err(WorkerError::Handshake("unexpected response".into()));
+                    pid: Some(pid),
+                    state: WorkerState::Idle,
+                    requests_handled: AtomicU64::new(0),
+                    rss_mb: AtomicU64::new(0),
+                    error_count: AtomicU64::new(0),
+                    transport: Some(transport),
+                })
             }
-            Ok(Err(e)) => {
-                warn!("Worker {} handshake read error: {}", id, e);
-                return Err(WorkerError::Handshake(e.to_string()));
-            }
-            Err(_) => {
-                warn!("Worker {} handshake timeout", id);
-                return Err(WorkerError::Handshake(
-                    "timeout: worker did not respond within 5s".into(),
-                ));
+            Err(e) => {
+                let _ = child.kill();
+                warn!("Worker {id} stub — Octane worker unavailable: {e}");
+                Ok(Self::new_test_stub(id))
             }
         }
-
-        let pid = child.id();
-        info!("Worker {} spawned (pid: {:?})", id, pid);
-
-        Ok(Self {
-            id,
-            pid: Some(pid),
-            state: WorkerState::Idle,
-            requests_handled: AtomicU64::new(0),
-            rss_mb: AtomicU64::new(0),
-            error_count: AtomicU64::new(0),
-            transport: Some(transport),
-        })
     }
 
     /// Spawn a new PHP worker process and connect via TCP (Windows).
     #[cfg(not(unix))]
     pub async fn spawn(
         id: usize,
-        _app_root: PathBuf,
+        app_root: PathBuf,
         _max_memory_mb: u64,
     ) -> Result<Self, WorkerError> {
+        if !app_root.exists() {
+            return Err(WorkerError::Handshake(format!(
+                "app_root not found: {}",
+                app_root.display()
+            )));
+        }
+
         // On Windows, try to connect to worker via TCP on a pre-assigned port
         let port = 19000 + id as u16; // Each worker gets a unique port
         let addr = format!("127.0.0.1:{}", port);
 
         info!("Connecting to worker {} via TCP at {}", id, addr);
 
-        // Wait for TCP server to be ready (short timeout for testing fallback)
-        let mut connected = false;
-        for _ in 0..10 {
-            if TcpStream::connect(&addr).await.is_ok() {
-                connected = true;
-                break;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-        }
-
-        if connected {
-            // Connect via IPC (TCP transport)
-            let mut transport = IpcTransport::connect(&addr).await?;
-
-            // Send Hello handshake and wait for Ack
-            let hello = IpcMessage::Hello {
-                version: "1.0".to_string(),
-                pid: std::process::id(),
-                capabilities: vec!["http".to_string(), "tasks".to_string()],
-            };
-
-            transport.send(hello).await?;
-
-            // Wait for Ack with timeout
-            match tokio::time::timeout(std::time::Duration::from_secs(5), transport.recv()).await {
-                Ok(Ok(IpcMessage::Ack)) => {
-                    info!("Worker {} handshake complete (TCP)", id);
-                }
-                Ok(Ok(other)) => {
-                    warn!(
-                        "Worker {} expected Ack, got {:?}",
-                        id,
-                        std::mem::discriminant(&other)
-                    );
-                    return Err(WorkerError::Handshake("unexpected response".into()));
-                }
-                Ok(Err(e)) => {
-                    warn!("Worker {} handshake read error: {}", id, e);
-                    return Err(WorkerError::Handshake(e.to_string()));
-                }
-                Err(_) => {
-                    warn!("Worker {} handshake timeout (TCP)", id);
-                    return Err(WorkerError::Handshake(
-                        "timeout: worker did not respond within 5s".into(),
-                    ));
-                }
-            }
-
-            Ok(Self {
+        // Single bounded connect (nusa-ipc TCP_CONNECT_TIMEOUT); avoids duplicate probe + connect.
+        if let Ok(mut transport) = IpcTransport::connect(&addr).await
+            && handshake_worker(&mut transport, id).await.is_ok()
+        {
+            return Ok(Self {
                 id,
                 pid: None,
                 state: WorkerState::Idle,
@@ -199,23 +271,22 @@ impl Worker {
                 rss_mb: AtomicU64::new(0),
                 error_count: AtomicU64::new(0),
                 transport: Some(transport),
-            })
-        } else {
-            // No PHP worker available Ã¢â‚¬â€ fall back to stub mode (useful for testing)
-            warn!(
-                "Worker {} stub Ã¢â‚¬â€ no PHP worker available at TCP {}",
-                id, addr
-            );
-            Ok(Self {
-                id,
-                pid: None,
-                state: WorkerState::Idle,
-                requests_handled: AtomicU64::new(0),
-                rss_mb: AtomicU64::new(0),
-                error_count: AtomicU64::new(0),
-                transport: None,
-            })
+            });
         }
+
+        warn!(
+            "Worker {} stub — no PHP worker available at TCP {}",
+            id, addr
+        );
+        Ok(Self {
+            id,
+            pid: None,
+            state: WorkerState::Idle,
+            requests_handled: AtomicU64::new(0),
+            rss_mb: AtomicU64::new(0),
+            error_count: AtomicU64::new(0),
+            transport: None,
+        })
     }
 
     /// Send a request to this worker.
@@ -296,12 +367,40 @@ impl WorkerPool {
         }
     }
 
-    /// Initialize the worker pool.
+    /// Initialize the worker pool (spawns workers concurrently).
     pub async fn initialize(&mut self) -> Result<(), WorkerError> {
-        info!("Initializing worker pool with {} workers", self.max_workers);
+        let count = self.max_workers;
+        info!("Initializing worker pool with {count} workers");
 
-        for i in 0..self.max_workers {
-            let worker = Worker::spawn(i, self.app_root.clone(), self.max_memory_mb).await?;
+        let app_root = self.app_root.clone();
+        let memory_mb = self.max_memory_mb;
+
+        let mut join_set = tokio::task::JoinSet::new();
+        for i in 0..count {
+            let root = app_root.clone();
+            join_set.spawn(async move {
+                let worker = Worker::spawn(i, root, memory_mb).await?;
+                Ok::<_, WorkerError>((i, worker))
+            });
+        }
+
+        let mut spawned = Vec::with_capacity(count);
+        while let Some(join_result) = join_set.join_next().await {
+            spawned
+                .push(join_result.map_err(|e| {
+                    WorkerError::Handshake(format!("worker task join failed: {e}"))
+                })?);
+        }
+        let mut ready: Vec<(usize, Worker)> = Vec::with_capacity(count);
+        for item in spawned {
+            ready.push(item?);
+        }
+        ready.sort_by_key(|(i, _)| *i);
+
+        self.workers.clear();
+        self.idle_queue.clear();
+        for (i, worker) in ready {
+            debug_assert_eq!(i, self.workers.len());
             self.idle_queue.push(i);
             self.workers.push(worker);
         }
@@ -321,7 +420,14 @@ impl WorkerPool {
 
     /// Return a worker to the idle queue.
     pub fn return_worker(&mut self, worker_id: usize) {
-        if self.workers[worker_id].state != WorkerState::Draining {
+        if worker_id >= self.workers.len() {
+            return;
+        }
+        if self.workers[worker_id].state == WorkerState::Draining {
+            self.idle_queue.retain(|&id| id != worker_id);
+            return;
+        }
+        if !self.idle_queue.contains(&worker_id) {
             self.idle_queue.push(worker_id);
         }
     }
@@ -385,5 +491,29 @@ impl WorkerPool {
 
     pub fn worker_mut(&mut self, id: usize) -> &mut Worker {
         &mut self.workers[id]
+    }
+
+    /// Populate the pool with stub workers (no PHP spawn). For tests only.
+    #[doc(hidden)]
+    pub fn initialize_test_stubs(&mut self) {
+        self.workers.clear();
+        self.idle_queue.clear();
+        for i in 0..self.max_workers {
+            self.workers.push(Worker::new_test_stub(i));
+            self.idle_queue.push(i);
+        }
+    }
+
+    /// Inject a stub worker for tests (`worker.id` must equal `workers.len()`).
+    #[doc(hidden)]
+    pub fn push_test_worker(&mut self, worker: Worker) {
+        debug_assert_eq!(worker.id, self.workers.len());
+        self.workers.push(worker);
+    }
+
+    /// Mark a worker as idle for tests.
+    #[doc(hidden)]
+    pub fn enqueue_idle_worker(&mut self, worker_id: usize) {
+        self.idle_queue.push(worker_id);
     }
 }

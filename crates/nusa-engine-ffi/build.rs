@@ -13,14 +13,24 @@ fn main() {
     // Register cfg flags so clippy doesn't complain
     println!("cargo::rustc-check-cfg=cfg(php_embed_available)");
 
-    // Only attempt bindgen on Linux
+    // Only attempt bindgen on Linux with embed headers available.
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     if target_os != "linux" {
         return;
     }
 
-    let php_include =
-        std::env::var("PHP_INCLUDE_DIR").unwrap_or_else(|_| "/usr/include/php".into());
+    // musl build scripts cannot dlopen libclang; stub unless PHP dev headers are wired in.
+    let target_env = std::env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
+    let php_include = match std::env::var("PHP_INCLUDE_DIR") {
+        Ok(dir) => dir,
+        Err(_) if target_env == "musl" => {
+            eprintln!(
+                "Warning: skipping bindgen on musl without PHP_INCLUDE_DIR. Using stub implementation."
+            );
+            return;
+        }
+        Err(_) => "/usr/include/php".into(),
+    };
 
     let bindings = bindgen::Builder::default()
         .header("wrapper.h")

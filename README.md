@@ -75,10 +75,10 @@ Client → TLS/HTTP2 → Rust Gateway (Axum)
 cp config.toml.example config.toml
 
 # Build
-cargo build --release
+just build
 
 # Run
-./target/release/nusa --config config.toml
+just run -- --config config.toml
 ```
 
 ### Docker

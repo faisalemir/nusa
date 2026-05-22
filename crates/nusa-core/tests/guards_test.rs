@@ -2,7 +2,9 @@
 //!
 //! Covers: default values, backpressure permit acquisition/limits, request size validation, timeout behavior.
 
-use nusa_core::{BackpressureGuard, EngineError, ResourceGuard, validate_request_size, with_timeout};
+use nusa_core::{
+    BackpressureGuard, EngineError, ResourceGuard, validate_request_size, with_timeout,
+};
 use std::time::Duration;
 
 // ── ResourceGuard ──
@@ -42,12 +44,18 @@ async fn backpressure_guard_blocks_when_at_capacity() {
 
     // With the permit held, try_acquire should return None
     let permit2 = guard.try_acquire().await;
-    assert!(permit2.is_none(), "should not acquire permit when at capacity");
+    assert!(
+        permit2.is_none(),
+        "should not acquire permit when at capacity"
+    );
 
     // Drop the first permit, then try again
     drop(permit1);
     let permit3 = guard.try_acquire().await;
-    assert!(permit3.is_some(), "should acquire permit after one is released");
+    assert!(
+        permit3.is_some(),
+        "should acquire permit after one is released"
+    );
 }
 
 #[tokio::test]
@@ -96,9 +104,7 @@ fn validate_request_size_zero_allowed() {
 
 #[tokio::test]
 async fn with_timeout_completes_within_limit() {
-    let result = with_timeout(5_000, async {
-        Ok::<_, EngineError>("success")
-    }).await;
+    let result = with_timeout(5_000, async { Ok::<_, EngineError>("success") }).await;
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), "success");
 }
@@ -108,7 +114,8 @@ async fn with_timeout_returns_error_on_timeout() {
     let result = with_timeout(10, async {
         tokio::time::sleep(Duration::from_secs(10)).await;
         Ok::<_, EngineError>("never")
-    }).await;
+    })
+    .await;
     assert!(result.is_err());
     assert!(matches!(result.unwrap_err(), EngineError::Timeout));
 }
@@ -117,7 +124,8 @@ async fn with_timeout_returns_error_on_timeout() {
 async fn with_timeout_propagates_other_errors() {
     let result = with_timeout(5_000, async {
         Err::<String, EngineError>(EngineError::ResourceLimit)
-    }).await;
+    })
+    .await;
     assert!(result.is_err());
     assert!(matches!(result.unwrap_err(), EngineError::ResourceLimit));
 }

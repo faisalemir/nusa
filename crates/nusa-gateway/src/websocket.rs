@@ -44,7 +44,8 @@ impl WsManager {
         tenant_id: TenantId,
     ) {
         let (tx, mut rx) = mpsc::unbounded_channel::<Message>();
-        self.connections.insert(connection_id.clone(), (tenant_id.clone(), tx));
+        self.connections
+            .insert(connection_id.clone(), (tenant_id.clone(), tx));
 
         info!(
             "WebSocket connection {} established for tenant {}",
@@ -105,7 +106,10 @@ impl WsManager {
         let mut count = 0;
         for entry in self.connections.iter() {
             if entry.value().0 == *tenant_id {
-                let _ = entry.value().1.send(Message::Text(message.to_string().into()));
+                let _ = entry
+                    .value()
+                    .1
+                    .send(Message::Text(message.to_string().into()));
                 count += 1;
             }
         }
@@ -133,6 +137,12 @@ impl WsManager {
         let (tx, rx) = mpsc::unbounded_channel::<Message>();
         self.connections.insert(connection_id, (tenant_id, tx));
         rx
+    }
+
+    /// Unregister a test connection (for testing cleanup behavior).
+    #[doc(hidden)]
+    pub fn unregister_test_connection(&self, connection_id: &ConnectionId) {
+        self.connections.remove(connection_id);
     }
 }
 

@@ -1,4 +1,6 @@
 target/
+.cargo/config.toml
+.cargo/config.toml.bak
 .git/
 .cursor/
 .vscode/

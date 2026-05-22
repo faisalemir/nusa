@@ -176,7 +176,10 @@ async fn start_server(config_path: &str) -> anyhow::Result<()> {
         );
         match pool.initialize().await {
             Ok(()) => {
-                tracing::info!("Octane worker pool initialized with {} workers", cfg.octane_workers);
+                tracing::info!(
+                    "Octane worker pool initialized with {} workers",
+                    cfg.octane_workers
+                );
                 Some(pool)
             }
             Err(e) => {
@@ -248,9 +251,7 @@ async fn start_server(config_path: &str) -> anyhow::Result<()> {
 
         // Shutdown Octane worker pool if active
         // Extract pool first to avoid holding MutexGuard across await
-        let pool_opt = octane_pool_shutdown
-            .lock()
-            .take();
+        let pool_opt = octane_pool_shutdown.lock().take();
 
         if let Some(mut pool) = pool_opt {
             let _ = pool.shutdown().await;

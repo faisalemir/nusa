@@ -18,6 +18,7 @@ use nusa_core::TenantId;
 pub fn extract_tenant(headers: &http::HeaderMap) -> Option<TenantId> {
     if let Some(header) = headers.get("x-tenant-id")
         && let Ok(value) = header.to_str()
+        && !value.is_empty()
     {
         return Some(TenantId::new(value));
     }
@@ -70,7 +71,10 @@ pub async fn request_size_limit(req: Request<Body>, next: Next) -> Response<Body
         && let Ok(len) = s.parse::<usize>()
         && len > 10 * 1024 * 1024
     {
-        return crate::response::status_response(StatusCode::PAYLOAD_TOO_LARGE, "Request too large");
+        return crate::response::status_response(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "Request too large",
+        );
     }
     next.run(req).await
 }

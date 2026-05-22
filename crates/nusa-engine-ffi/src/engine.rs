@@ -30,12 +30,14 @@ thread_local! {
 /// Uses `catch_unwind` (m06-error-handling) to catch segfaults/panics.
 pub struct FfiEngine {
     pool: tokio::sync::Semaphore,
+    max_workers: usize,
 }
 
 impl FfiEngine {
     pub fn new(max_workers: usize) -> Self {
         Self {
             pool: tokio::sync::Semaphore::new(max_workers),
+            max_workers,
         }
     }
 }
@@ -138,6 +140,10 @@ mod ffi_impl {
 #[async_trait]
 impl PhpEngine for FfiEngine {
     async fn execute(&self, ctx: RequestContext) -> Result<PhpResponse> {
+        if self.max_workers == 0 {
+            return Err(EngineError::ResourceLimit);
+        }
+
         // m07-concurrency: CPU-bound FFI off the async executor
         let _permit = self
             .pool

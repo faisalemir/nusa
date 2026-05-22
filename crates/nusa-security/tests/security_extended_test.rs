@@ -5,7 +5,7 @@
 //! - `m15-anti-pattern`: Security as code, not afterthought
 //! - `m06-error-handling`: Stubs return Ok on non-Linux
 
-use nusa_security::{apply_landlock, apply_seccomp};
+use nusa_security::{apply_landlock, verify_seccomp_filter};
 use std::path::Path;
 
 // ── Landlock: Path Edge Cases ──
@@ -65,30 +65,12 @@ fn apply_landlock_with_spaces_in_path() {
 
 #[test]
 fn apply_seccomp_idempotent_on_non_linux() {
-    // On non-Linux, calling seccomp multiple times should all return Ok
-    let result1 = apply_seccomp();
-    let result2 = apply_seccomp();
+    // Filter build is repeatable without touching the running test process.
+    let result1 = verify_seccomp_filter();
+    let result2 = verify_seccomp_filter();
 
-    assert!(result1.is_ok(), "first seccomp call must return Ok");
-    assert!(result2.is_ok(), "second seccomp call must return Ok");
-}
-
-#[cfg(target_os = "linux")]
-#[test]
-fn apply_seccomp_can_only_be_called_once() {
-    // On Linux, seccomp can only be called once per thread
-    // This tests that the function returns an error on second call
-    let result1 = apply_seccomp();
-    let result2 = apply_seccomp();
-
-    // First call should succeed (or already be filtered by outer seccomp)
-    // Second call should fail (seccomp is one-way)
-    if result1.is_ok() {
-        assert!(
-            result2.is_err(),
-            "seccomp second call should fail (one-way restriction)"
-        );
-    }
+    assert!(result1.is_ok(), "first seccomp verify must return Ok");
+    assert!(result2.is_ok(), "second seccomp verify must return Ok");
 }
 
 // ── Combined Security ──
@@ -96,8 +78,12 @@ fn apply_seccomp_can_only_be_called_once() {
 #[test]
 fn security_both_applied_in_sequence() {
     // Test that both security functions can be called in sequence
-    let landlock_result = apply_landlock(Path::new("/app/public"), Path::new("/tmp/nusa"));
-    let seccomp_result = apply_seccomp();
+    let tmp = std::env::temp_dir().join("nusa-security-seq");
+    std::fs::create_dir_all(&tmp).expect("tmpdir");
+    let code = tmp.join("code");
+    std::fs::create_dir_all(&code).expect("code dir");
+    let landlock_result = apply_landlock(&code, &tmp);
+    let seccomp_result = verify_seccomp_filter();
 
     // On Linux: landlock may fail if paths don't exist, seccomp may already be applied
     // On non-Linux: both return Ok
@@ -108,15 +94,17 @@ fn security_both_applied_in_sequence() {
 
 #[test]
 fn apply_landlock_returns_ok() {
-    let result = apply_landlock(
-        std::path::Path::new("/app/public"),
-        std::path::Path::new("/tmp/nusa"),
-    );
-    assert!(result.is_ok(), "apply_landlock must return Ok");
+    let tmp = std::env::temp_dir().join("nusa-security-landlock-ok");
+    std::fs::create_dir_all(&tmp).expect("tmpdir");
+    let code = tmp.join("code");
+    std::fs::create_dir_all(&code).expect("code dir");
+    let result = apply_landlock(&code, &tmp);
+    assert!(result.is_ok(), "apply_landlock must return Ok: {result:?}");
+    let _ = std::fs::remove_dir_all(&tmp);
 }
 
 #[test]
 fn apply_seccomp_returns_ok() {
-    let result = apply_seccomp();
-    assert!(result.is_ok(), "apply_seccomp must return Ok");
+    let result = verify_seccomp_filter();
+    assert!(result.is_ok(), "seccomp filter must build: {result:?}");
 }

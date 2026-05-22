@@ -234,7 +234,7 @@ fn task_custom_complex_payload() {
             "object": {"key": "value"}
         },
         "string": "hello",
-        "number": 3.14,
+        "number": 2.71,
         "bool": true,
         "null": null
     });

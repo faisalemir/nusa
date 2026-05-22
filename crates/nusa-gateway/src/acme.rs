@@ -75,14 +75,12 @@ impl TlsService {
         // Check cache first
         if let Some(cert) = self.load_cached_cert(domain) {
             info!("Loaded cached certificate for {}", domain);
-            self.cert_store
-                .write()
-                .replace(TlsCert {
-                    cert_pem: cert.cert_pem.clone(),
-                    key_pem: cert.key_pem.clone(),
-                    expires_at: cert.expires_at,
-                    domain: domain.to_string(),
-                });
+            self.cert_store.write().replace(TlsCert {
+                cert_pem: cert.cert_pem.clone(),
+                key_pem: cert.key_pem.clone(),
+                expires_at: cert.expires_at,
+                domain: domain.to_string(),
+            });
             return Ok(());
         }
 
@@ -126,8 +124,11 @@ impl TlsService {
 
     /// Check if certificate needs renewal (within 30 days of expiry).
     pub fn needs_renewal(cert: &TlsCert) -> bool {
-        let threshold = SystemTime::now() + Duration::from_secs(86400 * 30);
-        cert.expires_at < threshold
+        const RENEW_WINDOW: Duration = Duration::from_secs(86400 * 30);
+        match cert.expires_at.duration_since(SystemTime::now()) {
+            Ok(remaining) => remaining < RENEW_WINDOW,
+            Err(_) => true,
+        }
     }
 
     /// Run the ACME renewal loop for Nusa runtime.
@@ -143,13 +144,13 @@ impl TlsService {
         loop {
             let domains = self.domains.read().clone();
             for domain in domains {
-                if let Some(cert) = self.load_cached_cert(&domain) {
-                    if Self::needs_renewal(&cert) {
-                        info!("Certificate for {} needs renewal", domain);
-                        // In production: trigger ACME renewal via rustls-acme
-                        if let Err(e) = self.request_certificate(&domain).await {
-                            warn!("ACME renewal failed for {}: {}", domain, e);
-                        }
+                if let Some(cert) = self.load_cached_cert(&domain)
+                    && Self::needs_renewal(&cert)
+                {
+                    info!("Certificate for {} needs renewal", domain);
+                    // In production: trigger ACME renewal via rustls-acme
+                    if let Err(e) = self.request_certificate(&domain).await {
+                        warn!("ACME renewal failed for {}: {}", domain, e);
                     }
                 }
             }

@@ -86,7 +86,11 @@ impl PhpEngine for ChildEngine {
             cookies: Default::default(),
             files: vec![],
             body: Some(ctx.body().to_vec()),
-            server: ctx.env().iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
+            server: ctx
+                .env()
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect(),
             timeout_ms,
             trace_context: None,
         };

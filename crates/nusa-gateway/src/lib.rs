@@ -147,10 +147,7 @@ pub fn app(
             axum::routing::get(task_status_handler),
         )
         // Static files (Blueprint 6 E1)
-        .route(
-            "/static/{*path}",
-            axum::routing::get(static_file_handler),
-        )
+        .route("/static/{*path}", axum::routing::get(static_file_handler))
         // Catch-all route for PHP scripts
         .route("/{*path}", axum::routing::get(handler).post(handler))
         // Middleware Chain: trace, CORS, compression, size limit
@@ -350,7 +347,8 @@ async fn handler(State(state): State<AppState>, req: Request<Body>) -> Response<
             state.health_state.record_error();
             drop(permit);
             tracing::error!(err = %e, "engine execution failed");
-            let status = StatusCode::from_u16(e.to_http_status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+            let status = StatusCode::from_u16(e.to_http_status())
+                .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
             response::status_response(status, format!("Upstream Error: {e}"))
         }
     }

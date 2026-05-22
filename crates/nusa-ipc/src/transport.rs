@@ -20,6 +20,34 @@ use crate::error::IpcError;
 use crate::protocol::{IpcMessage, RequestId};
 use crate::trace::TraceContext;
 use std::collections::HashMap;
+use std::time::Duration;
+
+/// Production connect budget: OS defaults can block for many seconds on refused peers.
+const TCP_CONNECT_TIMEOUT: Duration = Duration::from_millis(250);
+
+async fn tcp_connect(addr: &str) -> Result<TcpStream, IpcError> {
+    match tokio::time::timeout(TCP_CONNECT_TIMEOUT, TcpStream::connect(addr)).await {
+        Ok(Ok(stream)) => Ok(stream),
+        Ok(Err(e)) => Err(IpcError::Io(e)),
+        Err(_) => Err(IpcError::Io(std::io::Error::new(
+            std::io::ErrorKind::TimedOut,
+            format!("TCP connect to {addr} timed out"),
+        ))),
+    }
+}
+
+#[cfg(unix)]
+async fn unix_connect(path: &str) -> Result<UnixStream, IpcError> {
+    const UNIX_CONNECT_TIMEOUT: Duration = Duration::from_millis(500);
+    match tokio::time::timeout(UNIX_CONNECT_TIMEOUT, UnixStream::connect(path)).await {
+        Ok(Ok(stream)) => Ok(stream),
+        Ok(Err(e)) => Err(IpcError::Io(e)),
+        Err(_) => Err(IpcError::Io(std::io::Error::new(
+            std::io::ErrorKind::TimedOut,
+            format!("Unix socket connect to {path} timed out"),
+        ))),
+    }
+}
 
 /// IPC Transport (UnixSocket on Unix, TCP on Windows).
 ///
@@ -71,12 +99,12 @@ impl IpcTransport {
         {
             // If path looks like a TCP address (contains :), use TCP
             if path.contains(':') && !path.starts_with('/') {
-                let stream = TcpStream::connect(path).await?;
+                let stream = tcp_connect(path).await?;
                 return Ok(Self {
                     stream: TransportStream::Tcp(stream),
                 });
             }
-            let stream = UnixStream::connect(path).await?;
+            let stream = unix_connect(path).await?;
             Ok(Self {
                 stream: TransportStream::Unix(stream),
             })
@@ -84,7 +112,7 @@ impl IpcTransport {
         #[cfg(not(unix))]
         {
             // On Windows, always use TCP. Path should be host:port.
-            let stream = TcpStream::connect(path).await?;
+            let stream = tcp_connect(path).await?;
             Ok(Self { stream })
         }
     }
@@ -92,16 +120,15 @@ impl IpcTransport {
     /// Create a TCP transport directly (useful for Windows or explicit TCP).
     pub async fn connect_tcp(host: &str, port: u16) -> Result<Self, IpcError> {
         let addr = format!("{host}:{port}");
+        let stream = tcp_connect(&addr).await?;
         #[cfg(unix)]
         {
-            let stream = TcpStream::connect(&addr).await?;
             Ok(Self {
                 stream: TransportStream::Tcp(stream),
             })
         }
         #[cfg(not(unix))]
         {
-            let stream = TcpStream::connect(&addr).await?;
             Ok(Self { stream })
         }
     }

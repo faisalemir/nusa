@@ -29,8 +29,11 @@ impl ChildProcess {
             php_binary, bootstrap_script
         );
 
-        let child = Command::new(php_binary)
-            .arg(bootstrap_script)
+        let mut cmd = Command::new(php_binary);
+        if !bootstrap_script.as_os_str().is_empty() {
+            cmd.arg(bootstrap_script);
+        }
+        let child = cmd
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())

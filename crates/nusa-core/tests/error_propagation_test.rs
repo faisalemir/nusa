@@ -236,6 +236,3 @@ async fn error_with_timeout_completes_in_time() {
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), 42);
 }
-
-
-

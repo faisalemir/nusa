@@ -8,11 +8,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use axum::{
-    Router,
-    body::Body,
-    http::Request,
-};
+use axum::{Router, body::Body, http::Request};
 use bytes::Bytes;
 use parking_lot::Mutex;
 use tower::ServiceExt;
@@ -33,7 +29,8 @@ use nusa_plugin_api::PluginRegistry;
 use nusa_telemetry::metrics::NusaMetrics;
 use std::sync::OnceLock;
 
-static PROMETHEUS_HANDLE: OnceLock<Arc<metrics_exporter_prometheus::PrometheusHandle>> = OnceLock::new();
+static PROMETHEUS_HANDLE: OnceLock<Arc<metrics_exporter_prometheus::PrometheusHandle>> =
+    OnceLock::new();
 
 fn get_prometheus_handle() -> Arc<metrics_exporter_prometheus::PrometheusHandle> {
     PROMETHEUS_HANDLE
@@ -406,7 +403,7 @@ async fn sec_unicode_nfc_nfd_same_result() {
         .clone()
         .oneshot(
             Request::builder()
-                .uri(&format!("/index.php?name={}", nfc))
+                .uri(format!("/index.php?name={}", nfc))
                 .method("GET")
                 .body(Body::empty())
                 .unwrap(),
@@ -417,7 +414,7 @@ async fn sec_unicode_nfc_nfd_same_result() {
         .clone()
         .oneshot(
             Request::builder()
-                .uri(&format!("/index.php?name={}", nfd))
+                .uri(format!("/index.php?name={}", nfd))
                 .method("GET")
                 .body(Body::empty())
                 .unwrap(),
@@ -437,7 +434,7 @@ async fn sec_zero_width_space_in_path() {
         .clone()
         .oneshot(
             Request::builder()
-                .uri(&format!("/index\u{200B}.php"))
+                .uri("/index\u{200B}.php".to_string())
                 .method("GET")
                 .body(Body::empty())
                 .unwrap(),

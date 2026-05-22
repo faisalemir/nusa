@@ -9,13 +9,13 @@
 use std::path::Path;
 
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
-use tokio::sync::mpsc;
 use tokio::sync::broadcast;
+use tokio::sync::mpsc;
 use tokio::time::Duration;
 use tracing::info;
 
 /// Action triggered by file change events.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DevAction {
     /// Reload configuration from file (e.g. .env change).
     ReloadConfig,
@@ -31,7 +31,13 @@ pub enum DevAction {
 const WATCH_PATTERNS: &[&str] = &["app", "config", "routes", "resources/views", ".env"];
 
 /// Ignored directories (never watch these).
-const IGNORE_DIRS: &[&str] = &["vendor", "node_modules", ".git", "storage", "bootstrap/cache"];
+const IGNORE_DIRS: &[&str] = &[
+    "vendor",
+    "node_modules",
+    ".git",
+    "storage",
+    "bootstrap/cache",
+];
 
 /// File watcher for hot-reload in development mode.
 ///
@@ -39,9 +45,19 @@ const IGNORE_DIRS: &[&str] = &["vendor", "node_modules", ".git", "storage", "boo
 /// m15-anti-pattern: Debounce window prevents rapid restarts from bulk file operations.
 pub struct DevWatcher {
     watcher: Option<RecommendedWatcher>,
+    debounce_task: Option<tokio::task::JoinHandle<()>>,
     pub debounce_ms: u64,
     pub pretty: bool,
     action_tx: broadcast::Sender<DevAction>,
+}
+
+impl Drop for DevWatcher {
+    fn drop(&mut self) {
+        if let Some(handle) = self.debounce_task.take() {
+            handle.abort();
+        }
+        self.watcher = None;
+    }
 }
 
 impl DevWatcher {
@@ -49,6 +65,7 @@ impl DevWatcher {
         let (action_tx, _) = broadcast::channel(32);
         Self {
             watcher: None,
+            debounce_task: None,
             debounce_ms,
             pretty,
             action_tx,
@@ -71,10 +88,14 @@ impl DevWatcher {
 
         let (tx, mut rx) = mpsc::unbounded_channel::<Event>();
 
-        // Spawn debounce task
-        tokio::spawn(async move {
+        if let Some(handle) = self.debounce_task.take() {
+            handle.abort();
+        }
+
+        // Spawn debounce task (aborted on Drop so inotify tasks do not leak FDs).
+        self.debounce_task = Some(tokio::spawn(async move {
             Self::debounce_loop(&mut rx, debounce_ms, &app_root_clone, pretty, action_tx).await;
-        });
+        }));
 
         let watcher = notify::recommended_watcher(move |res: Result<Event, _>| {
             if let Ok(event) = res {
@@ -125,12 +146,24 @@ impl DevWatcher {
             };
 
             tokio::select! {
-                Some(event) = rx.recv() => {
-                    pending_events.push(event);
-                    // Reset deadline on each new event
-                    deadline = Some(Instant::now() + debounce_dur);
+                event = rx.recv() => {
+                    match event {
+                        Some(event) => {
+                            pending_events.push(event);
+                            // Reset deadline on each new event
+                            deadline = Some(Instant::now() + debounce_dur);
+                        }
+                        None => {
+                            // Channel closed — flush any batched events before exiting.
+                            if !pending_events.is_empty() {
+                                let events: Vec<Event> = std::mem::take(&mut pending_events);
+                                Self::handle_events(&events, app_root, pretty, &action_tx);
+                            }
+                            break;
+                        }
+                    }
                 }
-                _ = async { sleep.await } => {
+                _ = sleep => {
                     if pending_events.is_empty() {
                         continue;
                     }
@@ -138,41 +171,74 @@ impl DevWatcher {
                     let events: Vec<Event> = std::mem::take(&mut pending_events);
                     deadline = None;
 
-                    for event in events {
-                        Self::handle_event(&event, app_root, pretty, &action_tx);
-                    }
+                    Self::handle_events(&events, app_root, pretty, &action_tx);
                 }
             }
         }
     }
 
-    /// Handle a file change event with appropriate action (m12-lifecycle).
-    pub fn handle_event(event: &Event, _app_root: &Path, _pretty: bool, action_tx: &broadcast::Sender<DevAction>) {
-        for path in &event.paths {
-            let path_str = path.to_string_lossy();
+    fn action_for_path(path_str: &str) -> Option<DevAction> {
+        if IGNORE_DIRS.iter().any(|d| path_str.contains(d)) {
+            return None;
+        }
+        if path_str.ends_with(".env") {
+            Some(DevAction::ReloadConfig)
+        } else if path_str.contains("config/") && path_str.ends_with(".php") {
+            Some(DevAction::RecycleWorkers)
+        } else if path_str.contains("resources/views/") && path_str.ends_with(".blade.php") {
+            Some(DevAction::ClearViewCache)
+        } else if path_str.contains("/app/") && path_str.ends_with(".php") {
+            Some(DevAction::InvalidateOpCache)
+        } else {
+            None
+        }
+    }
 
-            // m15-anti-pattern: Skip ignored directories
-            if IGNORE_DIRS.iter().any(|d| path_str.contains(d)) {
-                continue;
-            }
+    /// Handle a batch of file events; each action is sent at most once per debounce window.
+    pub fn handle_events(
+        events: &[Event],
+        _app_root: &Path,
+        _pretty: bool,
+        action_tx: &broadcast::Sender<DevAction>,
+    ) {
+        use std::collections::HashSet;
 
-            if path_str.ends_with(".env") {
-                // .env change → reload config via ArcSwap (no restart needed)
-                info!(".env changed — reloading config (hot)");
-                let _ = action_tx.send(DevAction::ReloadConfig);
-            } else if path_str.contains("config/") && path_str.ends_with(".php") {
-                // config/*.php change → graceful worker recycle
-                info!("Config changed — recycling workers");
-                let _ = action_tx.send(DevAction::RecycleWorkers);
-            } else if path_str.contains("app/") && path_str.ends_with(".php") {
-                // app/**/*.php change → OPcache invalidation + worker recycle
-                info!("App code changed — invalidating OPcache + recycling");
-                let _ = action_tx.send(DevAction::InvalidateOpCache);
-            } else if path_str.contains("resources/views/") && path_str.ends_with(".blade.php") {
-                // view change → clear view cache
-                info!("View changed — clearing view cache");
-                let _ = action_tx.send(DevAction::ClearViewCache);
+        let mut actions = HashSet::new();
+        for event in events {
+            for path in &event.paths {
+                let path_str = path.to_string_lossy().replace('\\', "/");
+                if let Some(action) = Self::action_for_path(&path_str) {
+                    actions.insert(action);
+                }
             }
         }
+
+        for action in actions {
+            match action {
+                DevAction::ReloadConfig => {
+                    info!(".env changed — reloading config (hot)");
+                }
+                DevAction::RecycleWorkers => {
+                    info!("Config changed — recycling workers");
+                }
+                DevAction::ClearViewCache => {
+                    info!("View changed — clearing view cache");
+                }
+                DevAction::InvalidateOpCache => {
+                    info!("App code changed — invalidating OPcache + recycling");
+                }
+            }
+            let _ = action_tx.send(action);
+        }
+    }
+
+    /// Handle a single file change event (m12-lifecycle).
+    pub fn handle_event(
+        event: &Event,
+        app_root: &Path,
+        pretty: bool,
+        action_tx: &broadcast::Sender<DevAction>,
+    ) {
+        Self::handle_events(std::slice::from_ref(event), app_root, pretty, action_tx);
     }
 }

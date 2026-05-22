@@ -60,9 +60,7 @@ async fn ws_manager_broadcast_isolation_between_tenants() {
         .await
         .expect("timeout waiting for message from tenant-a")
         .expect("channel closed");
-    assert!(
-        matches!(received_a, Message::Text(ref t) if t.to_string() == "message for A")
-    );
+    assert!(matches!(received_a, Message::Text(ref t) if *t == "message for A"));
 
     // Verify tenant-b does NOT receive (timeout expected)
     let received_b = tokio::time::timeout(Duration::from_millis(100), rx_b.recv()).await;
@@ -88,9 +86,9 @@ async fn ws_manager_broadcast_to_multiple_connections() {
     for (i, rx) in receivers.iter_mut().enumerate() {
         let received = tokio::time::timeout(Duration::from_millis(100), rx.recv())
             .await
-            .expect(format!("timeout waiting for connection {}", i).as_str())
+            .unwrap_or_else(|_| panic!("timeout waiting for connection {}", i))
             .expect("channel closed");
-        assert!(matches!(received, Message::Text(ref t) if t.to_string() == "broadcast"));
+        assert!(matches!(received, Message::Text(ref t) if *t == "broadcast"));
     }
 }
 
@@ -146,7 +144,9 @@ async fn ws_manager_concurrent_broadcasts() {
 #[tokio::test]
 async fn ws_manager_multiple_tenants_broadcast_independently() {
     let manager = WsManager::new();
-    let tenants: Vec<_> = (0..5).map(|i| TenantId::new(&format!("tenant-{}", i))).collect();
+    let tenants: Vec<_> = (0..5)
+        .map(|i| TenantId::new(format!("tenant-{}", i)))
+        .collect();
 
     let mut receivers = Vec::new();
     for (i, tenant) in tenants.iter().enumerate() {
@@ -163,11 +163,9 @@ async fn ws_manager_multiple_tenants_broadcast_independently() {
     for (i, rx) in receivers.iter_mut().enumerate() {
         let received = tokio::time::timeout(Duration::from_millis(100), rx.recv())
             .await
-            .expect(format!("timeout for tenant {}", i).as_str())
+            .unwrap_or_else(|_| panic!("timeout for tenant {}", i))
             .expect("channel closed");
-        assert!(
-            matches!(received, Message::Text(ref t) if t.to_string() == format!("msg-for-{}", i))
-        );
+        assert!(matches!(received, Message::Text(ref t) if *t == format!("msg-for-{}", i)));
     }
 }
 

@@ -164,7 +164,7 @@ async fn wasm_engine_multiple_concurrent_executes() {
     let engine = std::sync::Arc::new(WasmEngine::stub());
 
     let mut handles = Vec::new();
-    for i in 0..10 {
+    for _i in 0..10 {
         let e = engine.clone();
         handles.push(tokio::spawn(async move {
             let ctx = nusa_core::RequestContext::new(

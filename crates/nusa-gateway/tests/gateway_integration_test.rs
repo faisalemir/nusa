@@ -69,7 +69,8 @@ impl PhpEngine for FailingMockEngine {
 
 use std::sync::OnceLock;
 
-static PROMETHEUS_HANDLE: OnceLock<Arc<metrics_exporter_prometheus::PrometheusHandle>> = OnceLock::new();
+static PROMETHEUS_HANDLE: OnceLock<Arc<metrics_exporter_prometheus::PrometheusHandle>> =
+    OnceLock::new();
 
 fn get_prometheus_handle() -> Arc<metrics_exporter_prometheus::PrometheusHandle> {
     PROMETHEUS_HANDLE

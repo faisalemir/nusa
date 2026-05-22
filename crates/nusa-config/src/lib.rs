@@ -15,15 +15,15 @@ use std::sync::LazyLock;
 use arc_swap::ArcSwap;
 use figment::{
     Figment,
-    providers::{Env, Format, Toml},
+    providers::{Env, Format, Serialized, Toml},
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 /// Runtime configuration for the Nusa PHP runtime.
 ///
 /// Loaded from TOML file with environment variable overrides (`NUSA_` prefix).
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct RuntimeConfig {
     /// PHP engine type: FFI, WASM, or Child.
     pub engine: EngineKind,
@@ -61,7 +61,7 @@ fn default_max_requests() -> u64 {
 }
 
 /// PHP engine execution kind.
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "lowercase")]
 pub enum EngineKind {
     /// PHP embedded via FFI (libphp ZTS).
@@ -96,7 +96,12 @@ static CONFIG: LazyLock<ArcSwap<RuntimeConfig>> =
 /// Merges file config with `NUSA_`-prefixed environment variables.
 /// Validates that `max_workers > 0`.
 pub fn load(path: &str) -> anyhow::Result<()> {
+    if !std::path::Path::new(path).exists() {
+        return Err(anyhow::anyhow!("config file not found: {path}"));
+    }
+
     let cfg: RuntimeConfig = Figment::new()
+        .merge(Serialized::defaults(default_config()))
         .merge(Toml::file(path))
         .merge(Env::prefixed("nusa_"))
         .extract()?;

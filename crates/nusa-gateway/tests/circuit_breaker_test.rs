@@ -4,7 +4,7 @@
 
 use std::time::Duration;
 
-use nusa_gateway::circuit_breaker::{CircuitBreaker, CbState};
+use nusa_gateway::circuit_breaker::{CbState, CircuitBreaker};
 
 // ── Initial State ──
 
@@ -12,7 +12,10 @@ use nusa_gateway::circuit_breaker::{CircuitBreaker, CbState};
 fn circuit_breaker_starts_closed() {
     let cb = CircuitBreaker::new(3, Duration::from_secs(1));
     assert_eq!(cb.state(), CbState::Closed);
-    assert!(cb.allow_request(), "new circuit breaker must allow requests");
+    assert!(
+        cb.allow_request(),
+        "new circuit breaker must allow requests"
+    );
 }
 
 #[test]
@@ -29,7 +32,11 @@ fn circuit_breaker_opens_after_threshold() {
 
     cb.record_failure();
     cb.record_failure();
-    assert_eq!(cb.state(), CbState::Closed, "must stay closed below threshold");
+    assert_eq!(
+        cb.state(),
+        CbState::Closed,
+        "must stay closed below threshold"
+    );
     assert!(cb.allow_request());
 
     cb.record_failure();
@@ -151,4 +158,123 @@ fn circuit_breaker_rapid_failures() {
     }
     assert_eq!(cb.state(), CbState::Open);
     assert_eq!(cb.failure_count(), 10);
+}
+
+// ── Degradation & Recovery Cycle Tests ──
+
+/// High latency dependency → circuit breaker opens, fallback activates.
+#[test]
+fn circuit_breaker_degradation_opens_after_failures() {
+    let cb = CircuitBreaker::new(3, Duration::from_millis(100));
+
+    // Simulate 3 failures (like high latency dependency)
+    for _ in 0..3 {
+        cb.record_failure();
+    }
+
+    assert_eq!(cb.state(), CbState::Open, "should open after failures");
+    assert!(!cb.allow_request(), "should reject while open");
+}
+
+/// Dependency returns errors → circuit breaker, retry, then open.
+#[test]
+fn circuit_breaker_retry_then_open() {
+    let cb = CircuitBreaker::new(2, Duration::from_millis(50));
+
+    // Phase 1: First failure → retry possible
+    cb.record_failure();
+    assert_eq!(
+        cb.state(),
+        CbState::Closed,
+        "first failure keeps circuit closed"
+    );
+
+    // Phase 2: Second failure → opens
+    cb.record_failure();
+    assert_eq!(cb.state(), CbState::Open);
+
+    // Phase 3: Wait for recovery window
+    std::thread::sleep(Duration::from_millis(60));
+    assert!(cb.allow_request(), "should allow probe after timeout");
+    assert_eq!(cb.state(), CbState::HalfOpen);
+}
+
+/// Dependency slow then recovers → circuit half-open, probe, then close.
+#[test]
+fn circuit_breaker_half_open_probe_then_close() {
+    let cb = CircuitBreaker::new(1, Duration::from_millis(50));
+
+    // Trip
+    cb.record_failure();
+    assert_eq!(cb.state(), CbState::Open);
+
+    // Wait for half-open
+    std::thread::sleep(Duration::from_millis(60));
+    cb.allow_request(); // probe
+    assert_eq!(cb.state(), CbState::HalfOpen);
+
+    // Probe succeeds → close
+    cb.record_success();
+    assert_eq!(cb.state(), CbState::Closed);
+
+    // Normal operation resumes
+    assert!(cb.allow_request());
+}
+
+/// Resource exhaustion then freed → recovers without restart.
+#[test]
+fn circuit_breaker_recovery_without_restart() {
+    let cb = CircuitBreaker::new(2, Duration::from_millis(30));
+
+    // Exhaust (open circuit)
+    cb.record_failure();
+    cb.record_failure();
+    assert_eq!(cb.state(), CbState::Open);
+
+    // Recovery cycle
+    std::thread::sleep(Duration::from_millis(40));
+    cb.allow_request(); // half-open
+    cb.record_success(); // close
+
+    // Verify fully recovered
+    assert_eq!(cb.state(), CbState::Closed);
+    assert_eq!(cb.failure_count(), 0);
+    assert!(cb.allow_request());
+}
+
+/// Partial failure (50% errors) → degrades gracefully, not all-or-nothing.
+#[test]
+fn circuit_breaker_partial_failure_degradation() {
+    let cb = CircuitBreaker::new(5, Duration::from_millis(50));
+
+    // Mixed success/failure pattern - success does NOT reset failures in Closed state
+    cb.record_success();
+    cb.record_failure();
+    cb.record_success();
+    cb.record_failure();
+    cb.record_failure();
+    cb.record_failure();
+    cb.record_failure(); // 5th failure should trip it
+
+    // Now at threshold - should open
+    assert_eq!(cb.state(), CbState::Open);
+    assert!(!cb.allow_request());
+}
+
+/// Circuit breaker open → rapid checks don't cause state corruption.
+#[test]
+fn circuit_breaker_rapid_checks_while_open() {
+    let cb = CircuitBreaker::new(1, Duration::from_secs(10));
+    cb.record_failure();
+
+    // Rapid checks should all return false without corruption
+    for _ in 0..100 {
+        assert!(!cb.allow_request(), "should consistently reject while open");
+    }
+
+    assert_eq!(
+        cb.state(),
+        CbState::Open,
+        "state should not change from rapid checks"
+    );
 }

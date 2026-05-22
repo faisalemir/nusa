@@ -37,8 +37,8 @@ Remove your nginx/php-fpm configuration and replace with Nusa:
 cp config.toml.example config.toml
 
 # Start Nusa
-cargo build --release
-./target/release/nusa --config config.toml
+just build
+just run -- --config config.toml
 ```
 
 ### Step 4: Driver Alignment
@@ -117,7 +117,7 @@ composer require nusa/octane
 
 # After (Nusa)
 - name: Build Nusa Runtime
-  run: cargo build --release --bin nusa
+  run: just build
 ```
 
 ---

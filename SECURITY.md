@@ -3,7 +3,7 @@
 ## 1. Safety First Principle
 - **Global Rule:** `#![deny(unsafe_code)]` is enforced in all crates except `nusa-engine-ffi`.
 - **FFI Boundary:** All `unsafe` blocks in `nusa-engine-ffi` must have a `// SAFETY:` comment explaining why it is sound, referencing ZTS guarantees and isolation mechanisms.
-- **Audit:** `cargo geiger` is run in CI to visualize unsafe usage.
+- **Audit:** `just audit` is run in CI to visualize unsafe usage.
 
 ## 2. Threat Model
 | Vector | Mitigation | Verification |

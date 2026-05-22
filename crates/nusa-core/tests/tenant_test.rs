@@ -3,6 +3,8 @@
 //! Skills applied:
 //! - `m05-type-driven`: TenantId as HashMap key
 //! - `m09-domain`: Tenant registry isolation
+//!
+//! Note: Updated to trigger rebuild with new hash to bypass Windows file lock.
 
 use nusa_core::{TenantConfig, TenantId, TenantRegistry};
 
@@ -104,7 +106,7 @@ fn tenant_registry_multiple_tenants() {
 
     for i in 0..10 {
         registry.register(TenantConfig {
-            id: TenantId::new(&format!("tenant-{}", i)),
+            id: TenantId::new(format!("tenant-{}", i)),
             vfs_root: format!("/tenants/tenant-{}", i),
             max_memory_mb: 256,
             max_requests_per_minute: 1000,
@@ -114,7 +116,7 @@ fn tenant_registry_multiple_tenants() {
 
     // Even tenants are enabled, odd are disabled
     for i in 0..10 {
-        let id = TenantId::new(&format!("tenant-{}", i));
+        let id = TenantId::new(format!("tenant-{}", i));
         assert_eq!(registry.is_enabled(&id), i % 2 == 0);
     }
 }
@@ -137,3 +139,5 @@ fn tenant_id_as_str() {
     let id = TenantId::new("my-tenant");
     assert_eq!(id.as_str(), "my-tenant");
 }
+
+// marker

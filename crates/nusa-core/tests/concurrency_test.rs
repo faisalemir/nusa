@@ -217,6 +217,3 @@ fn task_custom_variant_returns_error_not_panic() {
     let inner = result.unwrap();
     assert!(inner.is_ok(), "task result must be received");
 }
-
-
-

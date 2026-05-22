@@ -199,5 +199,5 @@ fn engine_error_very_long_message() {
     let display = err.to_string();
 
     // === Assert ===
-    assert!(display.len() > 0);
+    assert!(!display.is_empty());
 }

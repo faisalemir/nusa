@@ -8,18 +8,30 @@ set shell := ["powershell.exe", "-c"]
 
 # --- Build & Test ---
 
+# Workspace members that need native PHP/ZTS (skip on host; run in podman-ci)
+workspace-test-excludes := "--exclude nusa-engine-ffi"
+
+# Warm registry dependency artifacts (re-run after Cargo.lock changes).
+# External crates from crates.io are cached; workspace members (path = "...") always
+# recompile when their .rs sources change — that is expected, not a version bump.
+cache-deps:
+    cargo build --workspace {{workspace-test-excludes}} --lib --bins --tests
+
 # Run all tests with nextest (full rebuild — slow)
 test:
-    cargo nextest run --workspace
+    cargo nextest run --workspace {{workspace-test-excludes}}
 
-# Quick test — only recompile changed tests (fast)
+# Run all tests; continue after failures (diagnostics)
+test-all:
+    cargo nextest run --workspace {{workspace-test-excludes}} --no-fail-fast
+
+# Quick test — reuse compiled test binaries when sources unchanged
 test-fast:
-    # Force nextest to use existing binaries, skip recompilation
-    CARGO_INCREMENTAL=0 cargo nextest run --workspace --no-fail-fast --retries 0
+    cargo nextest run --workspace {{workspace-test-excludes}} --no-fail-fast --retries 0
 
-# Run only new+extended test files (fast — limited scope)
+# Run only new+extended test files (gap-analysis additions)
 test-new:
-    cargo nextest run --workspace --test security_exhaustive_test --test fallback_test --test state_restore_test --test stress_test --test error_propagation_test --test soak_test --test property_test --test platform_test --test decision_table_test
+    cargo nextest run --workspace --no-fail-fast -E "binary(~_exhaustive) | binary(~_extended) | binary(~_domain) | binary(~_e2e) | binary(~stress_decision) | binary(lifecycle_test) | binary(security_enforcement_test) | binary(concurrency_resource_test) | binary(test_runner_test) | binary(soak_test)"
 
 # Run tests for a specific crate (fast — single crate)
 test-crate CRATE:
@@ -29,17 +41,25 @@ test-crate CRATE:
 test-coverage:
     cargo llvm-cov nextest --workspace --lcov > coverage.lcov
 
-# Run clippy with deny warnings
+# Run all Criterion benchmarks (release)
+bench:
+    cargo bench -p nusa-benchmarks
+
+# Run a single benchmark (e.g. just bench-fast gateway_bench)
+bench-fast BENCH:
+    cargo bench -p nusa-benchmarks --bench {{BENCH}}
+
+# Run clippy with deny warnings (libs + integration tests)
 lint:
-    cargo clippy --workspace -- -D warnings
+    cargo clippy --workspace {{workspace-test-excludes}} --tests --bins -- -D warnings
 
 # Format all code
 fmt:
-    cargo fmt --workspace
+    cargo fmt --all
 
 # Check formatting without changing files
 fmt-check:
-    cargo fmt --workspace --check
+    cargo fmt --all -- --check
 
 # Build release binary
 build-release:
@@ -68,44 +88,62 @@ security: audit geiger deny
 
 # --- CI ---
 
-# Run full CI pipeline locally
+# Full local gate: format, lint, compile cache, tests (zero errors/warnings)
+ci-local: fmt-check lint cache-deps test security
+
+# Run full CI pipeline locally (host OS — not authoritative for merge; use podman-ci)
 ci: fmt-check lint test security
 
-# --- Podman Alpine (Best Practices) ---
+# --- Podman Alpine ---
 #
-# Strategy: COPY source into image during build (no volume mount).
-# Dockerfile uses 2-layer approach for fast rebuilds:
-#   Layer 1: Cargo manifests + cargo build --lib (cached if deps unchanged)
-#   Layer 2: Full source + test execution
+# Image build (just podman-build):
+#   Layer 1: cargo-chef — crates.io deps → /opt/nusa-target
+#   Layer 2: full source + `nextest --no-run` — all test binaries precompiled in image
 #
-# Benefits:
-#   - No Windows → WSL volume mount overhead
-#   - Deps cached in image layer (fast rebuild ~30s)
-#   - Test runs on native ext4 filesystem
-#   - mold linker + CARGO_TERM_COLOR for progress
+# Live mount (podman-test-full): host /src only; CARGO_TARGET_DIR stays /opt/nusa-target
+# from the image (no target volume — a volume would hide prebuilt artifacts).
+# Only workspace crates recompile when you change local .rs files.
 
-# Build test image (first time: ~10 min, subsequent: ~30s)
+# Build test image (~10 min first time; ~1–3 min when only sources change)
 podman-build:
     podman build -t nusa-test-runner -f dockerfiles/nusa-test-runner.Dockerfile .
 
-# Run all workspace tests (excludes nusa-engine-ffi — needs PHP ZTS headers)
+# Mount live source; never use host target/ (avoids file-lock on Windows).
+podman-run-mount := '-v "' + justfile_directory() + ':/src:Z" -w /src'
+
+# Shell prefix: musl flags consistent with the image (stable fingerprints vs /opt/nusa-target).
+podman-cargo-sh := 'cp -f .cargo/config-alpine.toml .cargo/config.toml && '
+
+# Full workspace in Alpine (reuses /opt/nusa-target from image; recompile only changed crates).
+podman-test-full:
+    podman run --rm -t {{podman-run-mount}} nusa-test-runner sh -c "{{podman-cargo-sh}} cargo nextest run --workspace --test-threads 4 --no-fail-fast"
+
+# CI subset with live source (no FFI on host; FFI stub OK in Alpine).
+podman-test-live:
+    podman run --rm -t {{podman-run-mount}} nusa-test-runner sh -c "{{podman-cargo-sh}} cargo nextest run --workspace {{workspace-test-excludes}} --exclude nusa-cli --test-threads 4"
+
+# CI subset in Alpine (image-baked source; faster when not validating local edits).
 podman-test:
-    podman run --rm -t nusa-test-runner cargo nextest run --workspace --exclude nusa-engine-ffi --exclude nusa-cli --test-threads 4
+    podman run --rm -t nusa-test-runner cargo nextest run --workspace {{workspace-test-excludes}} --exclude nusa-cli --test-threads 4
 
-# Run specific test crate (example: just podman-test-pkg -p nusa-gateway)
+# Run specific test crate (example: just podman-test-pkg gateway)
 podman-test-pkg PACKAGE:
-    podman run --rm -t nusa-test-runner cargo nextest run --workspace --test-threads 4 -p {{PACKAGE}}
+    podman run --rm -t {{podman-run-mount}} nusa-test-runner sh -c "{{podman-cargo-sh}} cargo nextest run -p nusa-{{PACKAGE}} --test-threads 4"
 
-# Run clippy in Alpine
+# Run clippy in Alpine (live source)
 podman-lint:
-    podman run --rm -t nusa-test-runner cargo clippy --workspace -- -D warnings
+    podman run --rm -t {{podman-run-mount}} nusa-test-runner sh -c "{{podman-cargo-sh}} cargo clippy --workspace --tests --bins -- -D warnings"
 
 # Run full CI in Alpine
-podman-ci: podman-build podman-lint podman-test
+podman-ci: podman-build podman-lint podman-test-live
 
-# Rebuild image from scratch (clears cache)
+# Rebuild image from scratch (clears image layers)
 podman-clean:
     podman rmi nusa-test-runner 2>/dev/null || true
+
+# Remove legacy Podman volumes (no longer used; target/registry live in the image)
+podman-clean-cache:
+    podman volume rm nusa-cargo-registry nusa-cargo-git nusa-target-cache nusa-cargo-cache 2>/dev/null || true
 
 # --- Docker ---
 

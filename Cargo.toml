@@ -63,6 +63,7 @@ bytes = "1"
 # Security & Sandbox
 wasmtime = "44"
 wasmtime-wasi = "44"
+wat = "1.240"
 
 # Utilities
 notify = "8"

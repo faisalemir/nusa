@@ -102,7 +102,7 @@ fn tenant_registry_concurrent_register_and_check() {
     for i in 0..100 {
         let reg = registry.clone();
         handles.push(std::thread::spawn(move || {
-            let tenant_id = TenantId::new(&format!("tenant-{}", i));
+            let tenant_id = TenantId::new(format!("tenant-{}", i));
             let config = TenantConfig {
                 id: tenant_id.clone(),
                 vfs_root: format!("/app/{}", i),
@@ -163,7 +163,7 @@ fn resource_guard_max_request_bytes_zero() {
     };
 
     assert!(!validate_request_size(Some(1), guard.max_request_bytes));
-    assert!(validate_request_size(Some(0), guard.max_request_bytes));
+    assert!(!validate_request_size(Some(0), guard.max_request_bytes));
 }
 
 #[test]
@@ -174,7 +174,10 @@ fn resource_guard_max_request_bytes_usize_max() {
         max_concurrent: 10,
     };
 
-    assert!(validate_request_size(Some(u64::MAX.min(usize::MAX as u64)), guard.max_request_bytes));
+    assert!(validate_request_size(
+        Some(usize::MAX as u64),
+        guard.max_request_bytes
+    ));
 }
 
 // ── BackpressureGuard Edge Cases ──
@@ -294,7 +297,11 @@ fn engine_error_display_variants() {
 
     for err in &errors {
         let display = format!("{}", err);
-        assert!(!display.is_empty(), "error display must not be empty: {:?}", err);
+        assert!(
+            !display.is_empty(),
+            "error display must not be empty: {:?}",
+            err
+        );
     }
 }
 

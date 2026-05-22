@@ -70,7 +70,7 @@ SBOM is generated in CI pipeline and included in release artifacts.
 
 ## 9. CVE Monitoring Process
 
-1. `cargo audit` runs on every CI check
+1. `just audit` runs on every CI check (includes `cargo audit` + `cargo deny`)
 2. `cargo deny` checks for advisory database
 3. Weekly automated audit via GitHub Actions
 4. Critical CVEs block releases

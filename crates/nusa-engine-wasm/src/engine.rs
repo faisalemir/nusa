@@ -32,13 +32,15 @@ pub struct WasmEngine {
 impl WasmEngine {
     /// Create a new WASM engine from a compiled WASI module.
     pub fn new(wasm_path: PathBuf, memory_mb: u64, fuel: u64) -> Result<Self> {
-        let wasm_bytes = std::fs::read(&wasm_path).map_err(|e| EngineError::Sandbox(e.to_string()))?;
+        let wasm_bytes =
+            std::fs::read(&wasm_path).map_err(|e| EngineError::Sandbox(e.to_string()))?;
         let memory_limit_bytes = memory_mb * 1024 * 1024;
 
         let runtime = WasmRuntime::new(&wasm_bytes, memory_mb)
             .map_err(|e| EngineError::Sandbox(e.to_string()))?;
 
-        let module = runtime.load_module(&wasm_bytes)
+        let module = runtime
+            .load_module(&wasm_bytes)
             .map_err(|e| EngineError::Sandbox(e.to_string()))?;
 
         Ok(Self {
@@ -75,18 +77,22 @@ impl WasmEngine {
 #[async_trait::async_trait]
 impl PhpEngine for WasmEngine {
     async fn execute(&self, _ctx: RequestContext) -> Result<PhpResponse> {
-        let runtime_guard = self.runtime.lock()
+        let runtime_guard = self
+            .runtime
+            .lock()
             .map_err(|e| EngineError::Sandbox(format!("runtime lock poisoned: {e}")))?;
 
         // Create store with memory/fuel limits (L3: sandbox isolation)
-        let mut store = runtime_guard.create_store_limited(
-            &std::path::PathBuf::from("/tmp"),
-            self.memory_limit_bytes as usize,
-        )
-        .map_err(|e| EngineError::Sandbox(e.to_string()))?;
+        let mut store = runtime_guard
+            .create_store_limited(
+                &std::path::PathBuf::from("/tmp"),
+                self.memory_limit_bytes as usize,
+            )
+            .map_err(|e| EngineError::Sandbox(e.to_string()))?;
 
         // Set fuel per request
-        store.set_fuel(self.fuel_per_request)
+        store
+            .set_fuel(self.fuel_per_request)
             .map_err(|e| EngineError::Sandbox(e.to_string()))?;
 
         // Get module or return stub
@@ -95,7 +101,9 @@ impl PhpEngine for WasmEngine {
             return Ok(PhpResponse {
                 status: 200,
                 headers: Default::default(),
-                body: bytes::Bytes::from("WASM engine running (stub module, no WASI binary loaded)"),
+                body: bytes::Bytes::from(
+                    "WASM engine running (stub module, no WASI binary loaded)",
+                ),
             });
         };
 
@@ -107,7 +115,9 @@ impl PhpEngine for WasmEngine {
         let entry = instance
             .get_func(&mut store, "_start")
             .or_else(|| instance.get_func(&mut store, "main"))
-            .ok_or_else(|| EngineError::Sandbox("No entry point (_start/main) found in WASM module".into()))?;
+            .ok_or_else(|| {
+                EngineError::Sandbox("No entry point (_start/main) found in WASM module".into())
+            })?;
 
         // Execute with fuel tracking — if fuel runs out, wasmtime traps
         let result = entry.call(&mut store, &[], &mut []);

@@ -212,6 +212,3 @@ fn property_tenant_registry_isolation() {
     assert!(registry_a.is_enabled(&config.id));
     assert!(!registry_b.is_enabled(&config.id));
 }
-
-
-

@@ -213,3 +213,153 @@ fn rate_limiter_concurrent_access_thread_safe() {
     assert_eq!(allowed, 100, "exactly 100 must be allowed (burst size)");
     assert_eq!(rejected, 100, "exactly 100 must be rejected");
 }
+
+// ── Extended: Exact Boundary & Sliding Window ──
+
+/// Exactly at burst limit → last request passes.
+#[test]
+fn rate_limiter_exactly_at_limit_last_passes() {
+    let limiter = TenantRateLimiter::new(60, 5);
+    let tenant = TenantId::new("tenant-exact");
+
+    for i in 1..=5 {
+        assert!(limiter.is_allowed(&tenant), "request {} should pass", i);
+    }
+    assert!(
+        !limiter.is_allowed(&tenant),
+        "6th request should be rejected"
+    );
+}
+
+/// One over burst limit → 429-equivalent behavior.
+#[test]
+fn rate_limiter_one_over_limit_rejected() {
+    let limiter = TenantRateLimiter::new(60, 1);
+    let tenant = TenantId::new("tenant-one-over");
+
+    assert!(limiter.is_allowed(&tenant), "first request passes");
+    assert!(
+        !limiter.is_allowed(&tenant),
+        "second request should be rejected"
+    );
+}
+
+/// Sliding window: after time passes, tokens refill.
+#[test]
+fn rate_limiter_refill_after_time() {
+    use std::thread;
+    use std::time::Duration;
+
+    // High RPM to get quick refill (6000 rpm = 100/sec)
+    let limiter = TenantRateLimiter::new(6000, 1);
+    let tenant = TenantId::new("tenant-refill");
+
+    // Use the single burst token
+    limiter.is_allowed(&tenant);
+    assert!(!limiter.is_allowed(&tenant), "should be empty");
+
+    // Wait for refill (at 6000 rpm = 100/sec, 50ms should refill ~5 tokens)
+    thread::sleep(Duration::from_millis(50));
+
+    // Should have tokens again
+    assert!(
+        limiter.is_allowed(&tenant),
+        "should have refilled after wait"
+    );
+}
+
+/// Burst allowance exceeded → rejects but doesn't waste resources.
+#[test]
+fn rate_limiter_well_over_limit_rejects_cleanly() {
+    let limiter = TenantRateLimiter::new(60, 5);
+    let tenant = TenantId::new("tenant-well-over");
+
+    // Exhaust burst
+    for _ in 0..5 {
+        limiter.is_allowed(&tenant);
+    }
+
+    // Send many more — all should be rejected cleanly
+    for i in 0..100 {
+        assert!(
+            !limiter.is_allowed(&tenant),
+            "request {} should be rejected",
+            i
+        );
+    }
+}
+
+/// Runtime limit change → new limit takes effect immediately.
+#[test]
+fn rate_limiter_different_tenants_independent_limits() {
+    // Each tenant gets its own bucket
+    let limiter = TenantRateLimiter::new(60, 3);
+
+    let t1 = TenantId::new("t1");
+    let t2 = TenantId::new("t2");
+    let t3 = TenantId::new("t3");
+
+    // t1 exhausts its burst
+    for _ in 0..3 {
+        limiter.is_allowed(&t1);
+    }
+    assert!(!limiter.is_allowed(&t1), "t1 should be limited");
+
+    // t2 and t3 should still have full burst
+    assert!(limiter.is_allowed(&t2), "t2 should be allowed");
+    assert!(limiter.is_allowed(&t3), "t3 should be allowed");
+}
+
+/// Multiple tenant isolation under concurrent load.
+#[test]
+fn rate_limiter_concurrent_multiple_tenants_isolation() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::thread;
+
+    let limiter = Arc::new(TenantRateLimiter::new(60, 10));
+    let tenant_a = TenantId::new("tenant-a-concurrent");
+    let tenant_b = TenantId::new("tenant-b-concurrent");
+
+    let allowed_a = Arc::new(AtomicU64::new(0));
+    let allowed_b = Arc::new(AtomicU64::new(0));
+
+    // Thread A hammers tenant A
+    let la = limiter.clone();
+    let ta = tenant_a.clone();
+    let aa = allowed_a.clone();
+    let handle_a = thread::spawn(move || {
+        for _ in 0..50 {
+            if la.is_allowed(&ta) {
+                aa.fetch_add(1, Ordering::SeqCst);
+            }
+        }
+    });
+
+    // Thread B hammers tenant B
+    let lb = limiter.clone();
+    let tb = tenant_b.clone();
+    let ab = allowed_b.clone();
+    let handle_b = thread::spawn(move || {
+        for _ in 0..50 {
+            if lb.is_allowed(&tb) {
+                ab.fetch_add(1, Ordering::SeqCst);
+            }
+        }
+    });
+
+    handle_a.join().unwrap();
+    handle_b.join().unwrap();
+
+    // Each tenant should have exactly 10 allowed (burst size)
+    assert_eq!(
+        allowed_a.load(Ordering::SeqCst),
+        10,
+        "tenant A should have 10 allowed"
+    );
+    assert_eq!(
+        allowed_b.load(Ordering::SeqCst),
+        10,
+        "tenant B should have 10 allowed"
+    );
+}

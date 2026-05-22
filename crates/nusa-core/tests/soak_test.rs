@@ -206,6 +206,3 @@ fn soak_recovery_after_load() {
         heavy_count
     );
 }
-
-
-

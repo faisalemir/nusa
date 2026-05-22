@@ -34,7 +34,7 @@ The Nusa Runtime consists of:
 
 ### 3.4 Supply Chain Compromise
 - **Vector:** Malicious crate dependency or compromised build pipeline.
-- **Mitigation:** Pinned dependencies, cargo audit and cargo deny in CI, SBOM generation, SLSA provenance.
+- **Mitigation:** Pinned dependencies, `just audit` in CI, SBOM generation, SLSA provenance.
 - **Verification:** CI attestation, signed releases.
 
 ### 3.5 State Cross-Bleed (Octane Mode)

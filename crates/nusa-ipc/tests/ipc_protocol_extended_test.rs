@@ -19,7 +19,11 @@ fn ipc_message_hello_empty_capabilities() {
     let decoded = IpcMessage::from_framed_bytes(&bytes).unwrap();
 
     match decoded {
-        IpcMessage::Hello { version, pid, capabilities } => {
+        IpcMessage::Hello {
+            version,
+            pid,
+            capabilities,
+        } => {
             assert_eq!(version, "1.0");
             assert_eq!(pid, 12345);
             assert!(capabilities.is_empty());
@@ -95,7 +99,13 @@ fn ipc_message_request_empty_fields() {
     let decoded = IpcMessage::from_framed_bytes(&bytes).unwrap();
 
     match decoded {
-        IpcMessage::Request { method, uri, timeout_ms, body, .. } => {
+        IpcMessage::Request {
+            method,
+            uri,
+            timeout_ms,
+            body,
+            ..
+        } => {
             assert!(method.is_empty());
             assert!(uri.is_empty());
             assert_eq!(timeout_ms, 0);
@@ -138,7 +148,12 @@ fn ipc_message_response_status_max() {
     let decoded = IpcMessage::from_framed_bytes(&bytes).unwrap();
 
     match decoded {
-        IpcMessage::Response { status, terminated, body, .. } => {
+        IpcMessage::Response {
+            status,
+            terminated,
+            body,
+            ..
+        } => {
             assert_eq!(status, 999);
             assert!(terminated);
             assert_eq!(body.len(), 1000);
@@ -290,7 +305,12 @@ fn ipc_message_broadcast_event_empty_fields() {
     let decoded = IpcMessage::from_framed_bytes(&bytes).unwrap();
 
     match decoded {
-        IpcMessage::BroadcastEvent { channel, event, data, tenants } => {
+        IpcMessage::BroadcastEvent {
+            channel,
+            event,
+            data,
+            tenants,
+        } => {
             assert!(channel.is_empty());
             assert!(event.is_empty());
             assert!(data.is_empty());
@@ -313,7 +333,10 @@ fn ipc_message_broadcast_many_tenants() {
     let decoded = IpcMessage::from_framed_bytes(&bytes).unwrap();
 
     match decoded {
-        IpcMessage::BroadcastEvent { tenants: decoded_tenants, .. } => {
+        IpcMessage::BroadcastEvent {
+            tenants: decoded_tenants,
+            ..
+        } => {
             assert_eq!(decoded_tenants.len(), 1000);
         }
         _ => panic!("expected BroadcastEvent"),
@@ -358,10 +381,7 @@ fn trace_context_with_tracestate() {
         "traceparent".to_string(),
         vec!["00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01".to_string()],
     );
-    headers.insert(
-        "tracestate".to_string(),
-        vec!["vendor=value".to_string()],
-    );
+    headers.insert("tracestate".to_string(), vec!["vendor=value".to_string()]);
     let ctx = TraceContext::from_raw_headers(&headers);
     assert!(ctx.tracestate.is_some());
     assert_eq!(ctx.tracestate.unwrap(), "vendor=value");

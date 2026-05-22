@@ -28,9 +28,10 @@ fn cleanup(path: &str) {
 
 #[tokio::test]
 async fn config_hot_reload_detects_file_change() {
-    let _lock = CONFIG_LOCK.lock().expect("config lock must succeed");
+    let path = {
+        let _lock = CONFIG_LOCK.lock().expect("config lock must succeed");
 
-    let content = r#"
+        let content = r#"
         engine = "child"
         max_workers = 4
         timeout_ms = 30000
@@ -40,10 +41,12 @@ async fn config_hot_reload_detects_file_change() {
         tmp_dir = "/tmp"
         hot_reload = true
     "#;
-    let path = write_temp_config(content);
-    let _ = nusa_config::load(&path);
+        let path = write_temp_config(content);
+        let _ = nusa_config::load(&path);
 
-    assert_eq!(nusa_config::get().max_workers, 4);
+        assert_eq!(nusa_config::get().max_workers, 4);
+        path
+    };
 
     let handle = nusa_config::watch(path.clone());
 
@@ -82,9 +85,10 @@ async fn config_hot_reload_detects_file_change() {
 
 #[tokio::test]
 async fn config_watch_handles_deleted_file() {
-    let _lock = CONFIG_LOCK.lock().expect("config lock must succeed");
+    let path = {
+        let _lock = CONFIG_LOCK.lock().expect("config lock must succeed");
 
-    let content = r#"
+        let content = r#"
         engine = "child"
         max_workers = 4
         timeout_ms = 30000
@@ -94,8 +98,10 @@ async fn config_watch_handles_deleted_file() {
         tmp_dir = "/tmp"
         hot_reload = true
     "#;
-    let path = write_temp_config(content);
-    let _ = nusa_config::load(&path);
+        let path = write_temp_config(content);
+        let _ = nusa_config::load(&path);
+        path
+    };
 
     let handle = nusa_config::watch(path.clone());
 
@@ -115,9 +121,10 @@ async fn config_watch_handles_deleted_file() {
 
 #[tokio::test]
 async fn config_watch_handles_invalid_toml_gracefully() {
-    let _lock = CONFIG_LOCK.lock().expect("config lock must succeed");
+    let path = {
+        let _lock = CONFIG_LOCK.lock().expect("config lock must succeed");
 
-    let content = r#"
+        let content = r#"
         engine = "child"
         max_workers = 4
         timeout_ms = 30000
@@ -127,8 +134,10 @@ async fn config_watch_handles_invalid_toml_gracefully() {
         tmp_dir = "/tmp"
         hot_reload = true
     "#;
-    let path = write_temp_config(content);
-    let _ = nusa_config::load(&path);
+        let path = write_temp_config(content);
+        let _ = nusa_config::load(&path);
+        path
+    };
 
     let handle = nusa_config::watch(path.clone());
 
@@ -152,9 +161,10 @@ async fn config_watch_handles_invalid_toml_gracefully() {
 
 #[tokio::test]
 async fn config_watch_handles_file_recreated() {
-    let _lock = CONFIG_LOCK.lock().expect("config lock must succeed");
+    let path = {
+        let _lock = CONFIG_LOCK.lock().expect("config lock must succeed");
 
-    let content = r#"
+        let content = r#"
         engine = "child"
         max_workers = 4
         timeout_ms = 30000
@@ -164,8 +174,10 @@ async fn config_watch_handles_file_recreated() {
         tmp_dir = "/tmp"
         hot_reload = true
     "#;
-    let path = write_temp_config(content);
-    let _ = nusa_config::load(&path);
+        let path = write_temp_config(content);
+        let _ = nusa_config::load(&path);
+        path
+    };
 
     let handle = nusa_config::watch(path.clone());
 

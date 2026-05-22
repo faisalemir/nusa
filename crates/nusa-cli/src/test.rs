@@ -111,7 +111,11 @@ impl TestRunner {
 
                     // Use worker by index directly to avoid borrow conflicts
                     let idx = pool.idle_count() - 1;
-                    match pool.worker_mut(idx).handle_request(method, uri, 30000).await {
+                    match pool
+                        .worker_mut(idx)
+                        .handle_request(method, uri, 30000)
+                        .await
+                    {
                         Ok(_response) => {
                             passed += 1;
                             info!("PASS: {}", test_file.display());
@@ -125,7 +129,10 @@ impl TestRunner {
                     // Return worker to idle queue
                     pool.return_worker(pool.worker(idx).id);
                 } else {
-                    info!("No idle workers available, queuing test: {}", test_file.display());
+                    info!(
+                        "No idle workers available, queuing test: {}",
+                        test_file.display()
+                    );
                     failed += 1;
                 }
             }
@@ -175,20 +182,20 @@ impl TestRunner {
     }
 
     /// Enumerate test files in the test path.
-    fn enumerate_test_files(&self) -> Vec<PathBuf> {
+    pub fn enumerate_test_files(&self) -> Vec<PathBuf> {
         let mut files = Vec::new();
         if let Ok(entries) = std::fs::read_dir(&self.config.test_path) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if path.is_file() {
-                    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                        if ext == "php" && path.file_name().map_or(false, |n| {
-                            n.to_string_lossy().ends_with("Test.php")
-                                || n.to_string_lossy().ends_with("_test.php")
-                        }) {
-                            files.push(path);
-                        }
-                    }
+                if path.is_file()
+                    && let Some(ext) = path.extension().and_then(|e| e.to_str())
+                    && ext == "php"
+                    && path.file_name().is_some_and(|n| {
+                        n.to_string_lossy().ends_with("Test.php")
+                            || n.to_string_lossy().ends_with("_test.php")
+                    })
+                {
+                    files.push(path);
                 }
             }
         }
@@ -198,12 +205,11 @@ impl TestRunner {
     /// Reset state between test runs (m12-lifecycle).
     pub fn reset_state(&self) {
         if self.config.reset_between_tests {
-            self.orchestrator
-                .emit_event(
-                    nusa_octane_worker::state_reset::OctaneEvent::RequestReceived {
-                        request_id: "test-reset".to_string(),
-                    },
-                );
+            self.orchestrator.emit_event(
+                nusa_octane_worker::state_reset::OctaneEvent::RequestReceived {
+                    request_id: "test-reset".to_string(),
+                },
+            );
         }
     }
 

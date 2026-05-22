@@ -20,9 +20,18 @@ Major changes require an RFC.
 - **Safety:** `#![deny(unsafe_code)]` is mandatory outside `nusa-engine-ffi`.
 - **Errors:** Use `thiserror` for domain errors. No `unwrap()` in library code.
 - **Naming:** No `get_` prefix. snake_case (fn/var), CamelCase (type), SCREAMING_CASE (const).
-- **Formatting:** Run `cargo fmt` before committing.
-- **Linting:** Run `cargo clippy -- -D warnings` before committing.
+- **Formatting:** Run `just fmt` before committing.
+- **Linting:** Run `just lint` before committing.
 - **Concurrency:** Don't hold locks across `.await`. Use `parking_lot::Mutex`, not `std::sync::Mutex`.
+
+## Testing (Production Alpine)
+
+Production runs on **Alpine Linux musl**. Tests must not game results for a green host run.
+
+- **Before push:** `just podman-ci` (authoritative) — not host `just ci` alone.
+- **No silent skips:** Linux Landlock/Seccomp/integration tests must fail closed if enforcement cannot be verified — no `eprintln` + pass.
+- **Stubs:** Document `// STUB_CONTRACT:`; assert expected errors on stub paths; add Alpine integration coverage for real behavior.
+- **Details:** `.cursor/rules/nusa-standards.mdc` → Production Test Integrity; `.cursor/skills/rust-test/SKILL.md`.
 
 ## Reporting Issues
 Use the provided issue templates. Include:

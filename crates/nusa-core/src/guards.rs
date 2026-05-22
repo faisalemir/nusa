@@ -75,6 +75,9 @@ pub async fn with_timeout<F, T>(timeout_ms: u64, future: F) -> Result<T>
 where
     F: std::future::Future<Output = Result<T>>,
 {
+    if timeout_ms == 0 {
+        return Err(EngineError::Timeout);
+    }
     match timeout(Duration::from_millis(timeout_ms), future).await {
         Ok(result) => result,
         Err(_elapsed) => Err(EngineError::Timeout),
@@ -85,6 +88,9 @@ where
 ///
 /// Returns true if the request is within limits.
 pub fn validate_request_size(content_length: Option<u64>, max_bytes: usize) -> bool {
+    if max_bytes == 0 {
+        return false;
+    }
     if let Some(len) = content_length {
         len <= max_bytes as u64
     } else {

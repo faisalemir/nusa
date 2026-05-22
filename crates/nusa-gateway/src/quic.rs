@@ -10,8 +10,8 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::Router;
-use quinn::{Endpoint, ServerConfig, TransportConfig, VarInt};
 use quinn::crypto::rustls::QuicServerConfig;
+use quinn::{Endpoint, ServerConfig, TransportConfig, VarInt};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use tracing::{info, warn};
 

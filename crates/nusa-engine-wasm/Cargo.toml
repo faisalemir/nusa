@@ -19,3 +19,4 @@ bytes.workspace = true
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt"] }
 http.workspace = true
+wat.workspace = true

@@ -42,26 +42,25 @@ impl NusaMetrics {
 }
 
 /// Per-tenant metrics helpers (D5).
-/// Uses owned String keys to avoid lifetime issues with the metrics macro.
+/// Uses owned metric keys so Prometheus export includes each tenant (call after `init_metrics`).
 pub mod tenant {
-    use metrics::counter;
-    use metrics::histogram;
+    use metrics::{counter, histogram};
 
     /// Increment request counter for a specific tenant.
     pub fn record_request(tenant_id: &str) {
-        let key = format!("nusa_requests_total{{tenant_id=\"{}\"}}", tenant_id);
+        let key = format!("nusa_tenant_requests_total{{tenant_id=\"{tenant_id}\"}}");
         counter!(key).increment(1);
     }
 
     /// Increment failure counter for a specific tenant.
     pub fn record_failure(tenant_id: &str) {
-        let key = format!("nusa_requests_failed_total{{tenant_id=\"{}\"}}", tenant_id);
+        let key = format!("nusa_tenant_requests_failed_total{{tenant_id=\"{tenant_id}\"}}");
         counter!(key).increment(1);
     }
 
     /// Record request duration for a specific tenant.
     pub fn record_duration(tenant_id: &str, duration_ms: f64) {
-        let key = format!("nusa_request_duration_ms{{tenant_id=\"{}\"}}", tenant_id);
+        let key = format!("nusa_tenant_request_duration_ms{{tenant_id=\"{tenant_id}\"}}");
         histogram!(key).record(duration_ms);
     }
 }

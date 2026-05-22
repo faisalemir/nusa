@@ -40,14 +40,21 @@ impl DefaultTenantVfs {
             return true;
         }
 
-        // Reject null bytes
-        if relative.contains('\0') {
+        // Reject null bytes and percent-encoded traversal attempts
+        if relative.contains('\0') || relative.contains('%') {
             return false;
         }
 
-        // Reject absolute paths
+        // Reject POSIX absolute paths and Windows drive-letter paths (e.g. C:\ or C:/)
         if relative.starts_with('/') || relative.starts_with('\\') {
             return false;
+        }
+        if let Some((drive, rest)) = relative.split_once(':') {
+            if drive.len() == 1 && drive.as_bytes()[0].is_ascii_alphabetic() {
+                if rest.is_empty() || rest.starts_with('/') || rest.starts_with('\\') {
+                    return false;
+                }
+            }
         }
 
         // Reject .. components
