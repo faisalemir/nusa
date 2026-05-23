@@ -197,7 +197,7 @@ async fn property_positive_duration_timeout_works() {
 #[test]
 fn property_tenant_registry_isolation() {
     let mut registry_a = TenantRegistry::new();
-    let registry_b = TenantRegistry::new();
+    let mut registry_b = TenantRegistry::new();
 
     let config = TenantConfig {
         id: TenantId::new("shared-tenant"),
