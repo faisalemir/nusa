@@ -157,7 +157,6 @@ async fn laravel_gateway_octane_dispatch_integration() {
     use nusa_octane_worker::state_reset::StateResetOrchestrator;
     use nusa_plugin_api::PluginRegistry;
     use nusa_telemetry::metrics::NusaMetrics;
-    use parking_lot::Mutex;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use tower::ServiceExt;
 
@@ -194,7 +193,10 @@ async fn laravel_gateway_octane_dispatch_integration() {
     let health = Arc::new(HealthState::new());
     health.mark_ready();
 
-    let octane_pool = Arc::new(tokio::sync::Mutex::new(Some(pool)));
+    let laravel_runtime: Arc<tokio::sync::Mutex<Option<Box<dyn nusa_core::LaravelHttpRuntime>>>> =
+        Arc::new(tokio::sync::Mutex::new(Some(
+            Box::new(pool) as Box<dyn nusa_core::LaravelHttpRuntime>
+        )));
 
     static PROM: std::sync::OnceLock<Arc<metrics_exporter_prometheus::PrometheusHandle>> =
         std::sync::OnceLock::new();
@@ -231,8 +233,8 @@ async fn laravel_gateway_octane_dispatch_integration() {
         Arc::new(StaticFileHandler::new("/tmp".into())),
         Arc::new(NusaMetrics::init()),
         prom,
-        octane_pool.clone(),
-        Arc::new(Mutex::new(reset)),
+        laravel_runtime.clone(),
+        Arc::new(reset),
     );
 
     let response = router
@@ -255,9 +257,9 @@ async fn laravel_gateway_octane_dispatch_integration() {
         "response must come from Laravel fixture"
     );
 
-    let mut guard = octane_pool.lock().await;
+    let mut guard = laravel_runtime.lock().await;
     if let Some(mut p) = guard.take() {
-        let _ = p.shutdown().await;
+        p.shutdown().await;
     }
 }
 
@@ -431,4 +433,253 @@ async fn laravel_custom_middleware_runs_on_worker_path() {
     );
 
     pool.shutdown().await.ok();
+}
+
+/// Embed backend (`octane_backend = embed`) via stdio daemon — run in `just podman-test-laravel-embed`.
+#[tokio::test]
+#[cfg(unix)]
+async fn laravel_embed_pool_ping() {
+    if std::env::var("NUSA_OCTANE_BACKEND").ok().as_deref() != Some("embed") {
+        eprintln!("skip laravel_embed_pool_ping: set NUSA_OCTANE_BACKEND=embed");
+        return;
+    }
+
+    let root = require_laravel_fixture();
+    let mut pool = nusa_engine_embed::FfiWorkerPool::new(1, root, "php".into(), 512, 50);
+    pool.initialize().await.expect("embed initialize");
+
+    let response = pool
+        .handle_http_request(
+            "GET".into(),
+            "/nusa-ping".into(),
+            HashMap::new(),
+            None,
+            30_000,
+        )
+        .await
+        .expect("embed ping");
+
+    assert_eq!(response.status, 200);
+    assert!(
+        String::from_utf8_lossy(&response.body).contains("pong"),
+        "embed worker must serve Laravel /nusa-ping"
+    );
+
+    pool.shutdown().await;
+}
+
+/// Session cookie round-trip via embed stdio daemon (gate: `just podman-test-laravel-embed`).
+#[tokio::test]
+#[cfg(unix)]
+async fn laravel_embed_session_cookie_round_trip() {
+    if std::env::var("NUSA_OCTANE_BACKEND").ok().as_deref() != Some("embed") {
+        eprintln!("skip laravel_embed_session: set NUSA_OCTANE_BACKEND=embed");
+        return;
+    }
+
+    let root = require_laravel_fixture();
+    let mut pool = nusa_engine_embed::FfiWorkerPool::new(1, root, "php".into(), 512, 50);
+    pool.initialize().await.expect("embed initialize");
+
+    let set_res = pool
+        .handle_http_request(
+            "GET".into(),
+            "/nusa-session-set".into(),
+            HashMap::new(),
+            None,
+            30_000,
+        )
+        .await
+        .expect("embed session set");
+
+    assert_eq!(set_res.status, 200);
+    let set_cookie =
+        first_set_cookie_header(&set_res).expect("embed session set must return Set-Cookie");
+    let cookie_value = cookie_header_from_set_cookie(&set_cookie);
+
+    let mut headers = HashMap::new();
+    headers.insert("Cookie".into(), vec![cookie_value]);
+
+    let get_res = pool
+        .handle_http_request(
+            "GET".into(),
+            "/nusa-session-get".into(),
+            headers,
+            None,
+            30_000,
+        )
+        .await
+        .expect("embed session get");
+
+    assert_eq!(get_res.status, 200);
+    let body = String::from_utf8_lossy(&get_res.body);
+    assert!(
+        body.contains("session:fixture-session-ok"),
+        "embed session must round-trip via Cookie header, got: {body}"
+    );
+
+    pool.shutdown().await;
+}
+
+/// Blocking PDO `SELECT 1` via Laravel DB facade (embed) — baseline before PHP async proxy.
+#[tokio::test]
+#[cfg(unix)]
+async fn laravel_embed_db_ping() {
+    if std::env::var("NUSA_OCTANE_BACKEND").ok().as_deref() != Some("embed") {
+        eprintln!("skip laravel_embed_db_ping: set NUSA_OCTANE_BACKEND=embed");
+        return;
+    }
+
+    let root = require_laravel_fixture();
+    let mut pool = nusa_engine_embed::FfiWorkerPool::new(1, root, "php".into(), 512, 50);
+    pool.initialize().await.expect("embed initialize");
+
+    let response = pool
+        .handle_http_request(
+            "GET".into(),
+            "/nusa-db-ping".into(),
+            HashMap::new(),
+            None,
+            30_000,
+        )
+        .await
+        .expect("embed db ping");
+
+    assert_eq!(response.status, 200);
+    assert!(
+        String::from_utf8_lossy(&response.body).contains("db:1"),
+        "embed worker must run Laravel PDO select 1"
+    );
+
+    pool.shutdown().await;
+}
+
+/// P4-D: PHP embed async `SELECT 1` via NEB1 op 6/7 (`NUSA_EMBED_TRANSPORT=frame`, `NUSA_ASYNC_IO=stub`).
+#[tokio::test]
+#[cfg(unix)]
+async fn laravel_embed_async_spike() {
+    if std::env::var("NUSA_OCTANE_BACKEND").ok().as_deref() != Some("embed") {
+        eprintln!("skip laravel_embed_async_spike: set NUSA_OCTANE_BACKEND=embed");
+        return;
+    }
+
+    let root = require_laravel_fixture();
+    unsafe {
+        std::env::set_var("NUSA_EMBED_TRANSPORT", "frame");
+        std::env::set_var("NUSA_ASYNC_IO", "stub");
+    }
+
+    let mut pool = nusa_engine_embed::FfiWorkerPool::new(1, root, "php".into(), 512, 50);
+    pool.initialize().await.expect("embed initialize");
+
+    unsafe {
+        std::env::remove_var("NUSA_EMBED_TRANSPORT");
+        std::env::remove_var("NUSA_ASYNC_IO");
+    }
+
+    let response = pool
+        .handle_http_request(
+            "GET".into(),
+            "/nusa-async-spike".into(),
+            HashMap::new(),
+            None,
+            30_000,
+        )
+        .await
+        .expect("async spike");
+
+    assert_eq!(response.status, 200);
+    assert!(
+        String::from_utf8_lossy(&response.body).contains("async:1"),
+        "embed async spike must return async:1"
+    );
+
+    pool.shutdown().await;
+}
+
+/// P4-D: generalized read-only async SQL via embed NEB1.
+#[tokio::test]
+#[cfg(unix)]
+async fn laravel_embed_async_sql() {
+    if std::env::var("NUSA_OCTANE_BACKEND").ok().as_deref() != Some("embed") {
+        eprintln!("skip laravel_embed_async_sql: set NUSA_OCTANE_BACKEND=embed");
+        return;
+    }
+
+    let root = require_laravel_fixture();
+    unsafe {
+        std::env::set_var("NUSA_EMBED_TRANSPORT", "frame");
+        std::env::set_var("NUSA_ASYNC_IO", "stub");
+    }
+
+    let mut pool = nusa_engine_embed::FfiWorkerPool::new(1, root, "php".into(), 512, 50);
+    pool.initialize().await.expect("embed initialize");
+
+    unsafe {
+        std::env::remove_var("NUSA_EMBED_TRANSPORT");
+        std::env::remove_var("NUSA_ASYNC_IO");
+    }
+
+    let response = pool
+        .handle_http_request(
+            "GET".into(),
+            "/nusa-async-sql".into(),
+            HashMap::new(),
+            None,
+            30_000,
+        )
+        .await
+        .expect("async sql default");
+
+    assert_eq!(response.status, 200);
+    let body = String::from_utf8_lossy(&response.body);
+    assert!(
+        body.contains("\"two\":2") || body.contains("\"two\": 2"),
+        "default query SELECT 2 AS two, got: {body}"
+    );
+
+    pool.shutdown().await;
+}
+
+/// P4-D: Laravel `DB::selectOne` via `NusaAsyncSqliteConnection` + embed async I/O.
+#[tokio::test]
+#[cfg(unix)]
+async fn laravel_embed_db_async_proxy() {
+    if std::env::var("NUSA_OCTANE_BACKEND").ok().as_deref() != Some("embed") {
+        eprintln!("skip laravel_embed_db_async_proxy: set NUSA_OCTANE_BACKEND=embed");
+        return;
+    }
+
+    let root = require_laravel_fixture();
+    unsafe {
+        std::env::set_var("NUSA_EMBED_TRANSPORT", "frame");
+        std::env::set_var("NUSA_ASYNC_IO", "stub");
+    }
+
+    let mut pool = nusa_engine_embed::FfiWorkerPool::new(1, root, "php".into(), 512, 50);
+    pool.initialize().await.expect("embed initialize");
+
+    unsafe {
+        std::env::remove_var("NUSA_EMBED_TRANSPORT");
+        std::env::remove_var("NUSA_ASYNC_IO");
+    }
+
+    let response = pool
+        .handle_http_request(
+            "GET".into(),
+            "/nusa-db-async-proxy".into(),
+            HashMap::new(),
+            None,
+            30_000,
+        )
+        .await
+        .expect("db async proxy");
+
+    assert_eq!(response.status, 200);
+    assert!(
+        String::from_utf8_lossy(&response.body).contains("proxy:2"),
+        "DB facade must route through async proxy"
+    );
+
+    pool.shutdown().await;
 }
