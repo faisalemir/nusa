@@ -3,7 +3,7 @@
 # Skips `composer install` when vendor/ is already valid (image bake or prior run).
 set -eu
 
-ln -sfn /usr/bin/php84 /usr/bin/php
+ln -sfn /usr/bin/php85 /usr/bin/php
 cd /src/tests/fixtures/laravel-minimal
 ln -sfn /src/php-driver ./php-driver
 cp -f .env.example .env
@@ -27,6 +27,16 @@ if [ "$need_composer" -eq 1 ]; then
         --no-interaction --prefer-dist --no-progress
 fi
 
+# Regenerate autoloader for new PSR-4 files (e.g. Embed/FrameCodec)
+if [ -f vendor/autoload.php ]; then
+    COMPOSER_ALLOW_SUPERUSER=1 /usr/bin/composer dump-autoload \
+        --no-interaction --optimize
+fi
+
 test -f vendor/autoload.php
 test -f vendor/nusa/octane/src/Worker.php
 test -f php-driver/bin/nusa-octane-worker
+
+if [ -x /src/dockerfiles/warm-php-opcache.sh ]; then
+    NUSA_LARAVEL_FIXTURE=/src/tests/fixtures/laravel-minimal /src/dockerfiles/warm-php-opcache.sh
+fi
