@@ -77,7 +77,7 @@ The project maintains a **large, categorized test suite**—security, concurrenc
 | G2 | `/ready` when Octane pool required but unhealthy | **Addressed** — `/ready` checks `pool.is_ready()` | — |
 | G3 | CLI startup when `octane_workers > 0` | **Addressed** — process exits if init or ready fails | — |
 | G4 | Laravel fixture E2E in Alpine CI | **Addressed** — `tests/fixtures/laravel-minimal`, `nusa-e2e-tests`, `just podman-test-laravel` | — |
-| G5 | Normal Mode latency KPIs and signed release process | `just podman-bench-normal-smoke` + child bootstrap fixture; **FPM baseline table + v1.0.0 tag** still **P3–P4** | **P3–P4** |
+| G5 | Normal Mode latency KPIs and signed release process | Nusa wrk numbers in [`normal-mode-report.md`](../benchmarks/normal-mode-report.md) (2026-05-23); **FPM same-host row + v1.0.0 tag** remain **P3–P4** | **P3–P4** |
 | G5b | Session / middleware Laravel E2E | **Addressed** — fixture routes + pool forwards IPC response headers | — |
 | — | IPC `Cookie` → `cookies` field | **Addressed** — parsed in `nusa-ipc`, Octane transport + child engine | — |
 | — | Landlock RW for Laravel `storage/` | **Addressed** — `apply_landlock_paths` + `laravel::writable_dirs` | — |
@@ -97,7 +97,7 @@ We do not hide these behind optimistic README tables. [Migration](migration.md) 
 | **M2** | Octane core, IPC, worker recycle | **Complete in CI** — HTTP dispatch + Laravel live tests in `podman-ci` |
 | **M3** | TLS, QUIC, ACME modules, WASM engine paths | **Experimental** — QUIC listener spawns when `quic.enabled`; TLS/ACME partial; WASM CLI stub only |
 | **M4** | Multi-tenant, tasks, plugins | **Largely complete** — `[[tenants]]` in config; plugins pre/post; tasks API; open registry when `tenants` empty |
-| **M5** | Benchmarks, release matrix, GA | **Partial** — Alpine CI gates green; FPM comparison table + signed v1.0.0 tag open (P3–P4) |
+| **M5** | Benchmarks, release matrix, GA | **Partial** — Nusa wrk smoke documented; FPM baseline + signed v1.0.0 tag open (P3–P4) |
 
 ---
 

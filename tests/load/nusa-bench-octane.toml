@@ -1,7 +1,7 @@
 # P3 Octane route latency — Laravel minimal fixture (Alpine paths)
 engine = "child"
-octane_workers = 1
-max_workers = 8
+octane_workers = 4
+max_workers = 128
 timeout_ms = 30000
 hot_reload = false
 bind = "127.0.0.1:18081"

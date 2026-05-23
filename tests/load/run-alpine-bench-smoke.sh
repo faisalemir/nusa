@@ -64,6 +64,12 @@ run_wrk() {
   WRK_CONNECTIONS="${WRK_CONNECTIONS:-10}" \
   WRK_THREADS="${WRK_THREADS:-2}" \
     sh tests/load/record-wrk.sh "$url" "$label" "$out"
+  if grep -q "Non-2xx or 3xx responses:" "$out"; then
+  non2xx=$(grep "Non-2xx or 3xx responses:" "$out" | awk '{print $NF}')
+    if [ -n "$non2xx" ] && [ "$non2xx" != "0" ]; then
+      echo "WARN: ${label} had ${non2xx} non-2xx responses — raise max_workers or lower WRK_CONNECTIONS" >&2
+    fi
+  fi
   stats=$(sh tests/load/parse-wrk-percentiles.sh <"$out")
   echo "${label}: ${stats} (see ${out})"
   eval "$stats"

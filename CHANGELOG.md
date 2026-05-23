@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Laravel plug-and-play: env-only `NUSA_*`, `nusa init`, `[[tenants]]`, Landlock RW for `storage/`, IPC cookie parsing
+- P3: documented release wrk run in `docs/benchmarks/normal-mode-report.md` (Alpine 2026-05-23)
 - P3: `php_bootstrap` / `php_binary` config, `php-static-minimal` fixture, `just podman-bench-normal-smoke`
 - Gateway forwards `X-Request-Method` / `X-Request-Uri` to child engine
 - CLI `nusa --version` and `just version` / `just release-bump` / `just sync-composer-version` for SemVer workflow
@@ -52,8 +54,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Migration and runbook under `docs/public/`
 
 ### Known gaps (pre-GA)
-- Published Normal Mode vs FPM numbers (`docs/benchmarks/normal-mode-report.md` — fill before v1.0.0)
-- Signed release / SBOM on tag (P4)
+- PHP-FPM baseline row on same host as Nusa wrk (`docs/benchmarks/normal-mode-report.md` — required for v1.0.0)
+- Signed release / SBOM on tag (P4) — see `docs/contributor/release-checklist.md`
 - Blueprint 6 items (ACME/QUIC/blue-green) — see `docs/contributor/post-ga-blueprint.md`
 
 #### Phase 1: Normal Mode MVP (historical changelog — verify against code)

@@ -1,7 +1,7 @@
 # P3 Normal mode (child engine) — php-static-minimal fixture (Alpine paths)
 engine = "child"
 octane_workers = 0
-max_workers = 8
+max_workers = 128
 timeout_ms = 30000
 hot_reload = false
 bind = "127.0.0.1:18080"

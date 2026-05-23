@@ -23,6 +23,7 @@ docs/plan
 # Generated wrk smoke (see docs/benchmarks/artifacts/README.md)
 docs/benchmarks/artifacts/*
 !docs/benchmarks/artifacts/README.md
+!docs/benchmarks/artifacts/normal-smoke-*.md
 
 
 .cowork/
