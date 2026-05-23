@@ -135,4 +135,4 @@ just test-coverage
 - [`tests/README.md`](../../tests/README.md)
 - [Production readiness phases](rfc/production-readiness.md) — P0–P5 + sector tracking
 - `.cursor/skills/rust-test/SKILL.md`
-- `.cursor/rules/nusa-standards.mdc` — Production Test Integrity section
+- `.cursor/rules/nusa-standards.mdc` — quality gate summary; full Alpine/test rules in this file and `rust-test` skill

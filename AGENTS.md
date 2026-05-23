@@ -34,6 +34,8 @@ Optional deep context (local, gitignored): `docs/plan/` blueprint 0–6.
 
 When `octane_pool` is initialized and `pool.is_ready()`, the gateway catch-all handler dispatches via `WorkerPool::handle_http_request` (not `engine.execute`). `/ready` fails closed if workers are configured but lack IPC transport. See [`crates/nusa-gateway/src/lib.rs`](crates/nusa-gateway/src/lib.rs) and [`docs/ai/hotspots.md`](docs/ai/hotspots.md).
 
+**PHP driver:** Composer package **`nusa/octane`** in `php-driver/` — `NusaOctaneServiceProvider`, worker binary **`nusa-octane-worker`** (not `octane-rust-worker`). User guide: [`docs/public/laravel/php-driver.md`](docs/public/laravel/php-driver.md).
+
 ## Skills (project)
 
 | Topic | Path |

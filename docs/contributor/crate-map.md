@@ -34,11 +34,13 @@ engines → nusa-core, nusa-plugin-api (where applicable)
 | Each library crate | `crates/<name>/tests/` |
 | Workspace integration | `tests/integration/` |
 
-## Hot-path files (P1)
+## Hot-path files (Octane)
 
-- `crates/nusa-gateway/src/lib.rs` — add Octane branch in `handler`
-- `crates/nusa-octane-worker/src/pool.rs` — pool API
+- `crates/nusa-gateway/src/lib.rs` — Octane branch in `handler`
+- `crates/nusa-octane-worker/src/pool.rs` — pool API, spawns `nusa-octane-worker`
+- `php-driver/bin/nusa-octane-worker` — PHP worker entrypoint
+- `php-driver/src/NusaOctaneServiceProvider.php` — Laravel integration
 - `crates/nusa-ipc/src/` — request/response with body
-- `crates/nusa-cli/src/main.rs` — fail closed on pool init failure
+- `crates/nusa-cli/src/server.rs` — fail closed on pool init failure
 
 See [`docs/ai/hotspots.md`](../ai/hotspots.md).

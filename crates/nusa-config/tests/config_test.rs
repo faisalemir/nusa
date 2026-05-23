@@ -620,3 +620,74 @@ async fn config_hot_reload_false_exits_immediately() {
     );
     cleanup(&path);
 }
+
+#[test]
+fn config_bind_and_static_root_defaults() {
+    let _lock = CONFIG_LOCK.lock().expect("config lock must succeed");
+
+    let content = r#"
+        engine = "child"
+        max_workers = 4
+        timeout_ms = 30000
+        wasm_memory_mb = 256
+        vfs_root = "/app"
+        code_dir = "/var/www/laravel"
+        tmp_dir = "/tmp"
+        hot_reload = true
+    "#;
+    let path = write_temp_config(content);
+    nusa_config::load(&path).expect("load must succeed");
+    cleanup(&path);
+
+    let cfg = nusa_config::get();
+    assert_eq!(cfg.bind, "0.0.0.0:8080");
+    assert_eq!(
+        nusa_config::effective_static_root(&cfg),
+        "/var/www/laravel/public"
+    );
+}
+
+#[test]
+fn config_invalid_bind_rejected() {
+    let _lock = CONFIG_LOCK.lock().expect("config lock must succeed");
+
+    let content = r#"
+        engine = "child"
+        max_workers = 4
+        timeout_ms = 30000
+        wasm_memory_mb = 256
+        vfs_root = "/app"
+        code_dir = "/app"
+        tmp_dir = "/tmp"
+        hot_reload = true
+        bind = "not-a-socket-addr"
+    "#;
+    let path = write_temp_config(content);
+    let result = nusa_config::load(&path);
+    cleanup(&path);
+
+    assert!(result.is_err(), "invalid bind must fail load");
+}
+
+#[test]
+fn config_explicit_static_root_overrides_derivation() {
+    let _lock = CONFIG_LOCK.lock().expect("config lock must succeed");
+
+    let content = r#"
+        engine = "child"
+        max_workers = 4
+        timeout_ms = 30000
+        wasm_memory_mb = 256
+        vfs_root = "/app"
+        code_dir = "/app"
+        tmp_dir = "/tmp"
+        hot_reload = true
+        static_root = "/custom/static"
+    "#;
+    let path = write_temp_config(content);
+    nusa_config::load(&path).expect("load must succeed");
+    cleanup(&path);
+
+    let cfg = nusa_config::get();
+    assert_eq!(nusa_config::effective_static_root(&cfg), "/custom/static");
+}

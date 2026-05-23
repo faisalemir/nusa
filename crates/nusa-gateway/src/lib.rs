@@ -325,6 +325,18 @@ async fn handler(State(state): State<AppState>, req: Request<Body>) -> Response<
         }
     }
 
+    let mut ctx = ctx;
+    if let Err(e) = state.plugins.run_pre_exec(&mut ctx).await {
+        state.metrics.requests_failed_total.increment(1);
+        state.health_state.record_error();
+        drop(permit);
+        let status =
+            StatusCode::from_u16(e.to_http_status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+        return response::status_response(status, format!("Plugin Error: {e}"));
+    }
+
+    let ctx_post = ctx.clone();
+
     let method_str = method.to_string();
     let uri_str = uri
         .path_and_query()
@@ -393,6 +405,14 @@ async fn handler(State(state): State<AppState>, req: Request<Body>) -> Response<
 
     match execution {
         Ok(res) => {
+            if let Err(e) = state.plugins.run_post_exec(&ctx_post).await {
+                state.metrics.requests_failed_total.increment(1);
+                state.health_state.record_error();
+                drop(permit);
+                let status = StatusCode::from_u16(e.to_http_status())
+                    .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+                return response::status_response(status, format!("Plugin Error: {e}"));
+            }
             state.circuit_breaker.record_success();
             if let Some(tid) = &tenant_id_for_cb {
                 state.tenant_cb.record_success(tid);

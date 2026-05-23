@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace Nusa\Octane;
 
+use Illuminate\Support\Facades\Facade;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Octane\Events\RequestHandled;
 use Laravel\Octane\Events\RequestReceived;

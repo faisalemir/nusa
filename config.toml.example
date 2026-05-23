@@ -36,3 +36,22 @@ octane_max_memory_mb = 512
 
 # Recycle worker after this many handled requests
 octane_max_requests = 1000
+
+# HTTP listen address (override with NUSA_BIND)
+bind = "0.0.0.0:8080"
+
+# Static files root (empty = {code_dir}/public)
+static_root = ""
+
+# --- Experimental (default off) ---
+
+[tls]
+enabled = false
+acme_email = ""
+
+[redis]
+broadcast_url = ""
+
+[quic]
+enabled = false
+bind = "0.0.0.0:443"

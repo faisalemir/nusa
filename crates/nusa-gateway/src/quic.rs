@@ -7,7 +7,7 @@
 //! - `m12-lifecycle`: QUIC endpoint initialization → serve → graceful shutdown
 
 use std::net::SocketAddr;
-use std::sync::Arc;
+use std::sync::{Arc, Once};
 
 use axum::Router;
 use quinn::crypto::rustls::QuicServerConfig;
@@ -80,6 +80,38 @@ impl QuicListener {
 
         Ok(())
     }
+}
+
+static RUSTLS_PROVIDER: Once = Once::new();
+
+fn ensure_rustls_crypto_provider() {
+    RUSTLS_PROVIDER.call_once(|| {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    });
+}
+
+/// Self-signed TLS material for experimental QUIC (development only).
+pub fn experimental_self_signed_tls()
+-> anyhow::Result<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>)> {
+    ensure_rustls_crypto_provider();
+    let generated = rcgen::generate_simple_self_signed(vec!["localhost".to_string()])?;
+    let cert = CertificateDer::from(generated.cert);
+    let key = PrivateKeyDer::Pkcs8(generated.key_pair.serialize_der().into());
+    Ok((vec![cert], key))
+}
+
+/// Spawn the experimental QUIC accept loop on a background task.
+pub fn spawn_experimental(bind: &str, app: Router) -> anyhow::Result<tokio::task::JoinHandle<()>> {
+    let addr: SocketAddr = bind
+        .parse()
+        .map_err(|e| anyhow::anyhow!("invalid quic bind {bind}: {e}"))?;
+    let (cert, key) = experimental_self_signed_tls()?;
+    let listener = QuicListener::new(addr, cert, key);
+    Ok(tokio::spawn(async move {
+        if let Err(e) = listener.serve(app).await {
+            tracing::error!(err = %e, "QUIC listener exited");
+        }
+    }))
 }
 
 /// Create HTTP/3 compatible TLS config with h3 ALPN.

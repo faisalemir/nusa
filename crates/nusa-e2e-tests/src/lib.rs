@@ -30,7 +30,7 @@ pub fn laravel_fixture_root() -> Option<PathBuf> {
 pub fn fixture_ready(path: &Path) -> bool {
     path.join("vendor/autoload.php").is_file()
         && path.join("bootstrap/app.php").is_file()
-        && path.join("php-driver/bin/octane-rust-worker").is_file()
+        && path.join("php-driver/bin/nusa-octane-worker").is_file()
 }
 
 /// Panics with an actionable message when the fixture is not prepared.

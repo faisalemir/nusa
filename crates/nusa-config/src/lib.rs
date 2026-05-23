@@ -50,6 +50,52 @@ pub struct RuntimeConfig {
     /// Octane worker max requests before recycling.
     #[serde(default = "default_max_requests")]
     pub octane_max_requests: u64,
+    /// HTTP listen address (e.g. `0.0.0.0:8080`).
+    #[serde(default = "default_bind")]
+    pub bind: String,
+    /// Static file document root; when empty, uses `{code_dir}/public`.
+    #[serde(default)]
+    pub static_root: String,
+    /// TLS / ACME settings (experimental).
+    #[serde(default)]
+    pub tls: TlsSettings,
+    /// Redis broadcast bridge (empty URL = disabled).
+    #[serde(default)]
+    pub redis: RedisSettings,
+    /// HTTP/3 QUIC listener (experimental).
+    #[serde(default)]
+    pub quic: QuicSettings,
+}
+
+/// TLS / ACME configuration (experimental; full ACME is post-GA).
+#[derive(Deserialize, Serialize, Clone, Debug, Default)]
+pub struct TlsSettings {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub acme_email: String,
+}
+
+/// Redis pub/sub broadcast bridge.
+#[derive(Deserialize, Serialize, Clone, Debug, Default)]
+pub struct RedisSettings {
+    /// Redis URL; empty disables the bridge.
+    #[serde(default)]
+    pub broadcast_url: String,
+}
+
+/// HTTP/3 QUIC listener (experimental).
+#[derive(Deserialize, Serialize, Clone, Debug, Default)]
+pub struct QuicSettings {
+    #[serde(default)]
+    pub enabled: bool,
+    /// UDP listen address when QUIC is enabled.
+    #[serde(default = "default_quic_bind")]
+    pub bind: String,
+}
+
+fn default_quic_bind() -> String {
+    "0.0.0.0:443".into()
 }
 
 fn default_max_memory_mb() -> u64 {
@@ -58,6 +104,19 @@ fn default_max_memory_mb() -> u64 {
 
 fn default_max_requests() -> u64 {
     1000
+}
+
+fn default_bind() -> String {
+    "0.0.0.0:8080".into()
+}
+
+/// Resolved static file root (explicit `static_root` or Laravel `public/` under `code_dir`).
+pub fn effective_static_root(cfg: &RuntimeConfig) -> String {
+    if !cfg.static_root.is_empty() {
+        return cfg.static_root.clone();
+    }
+    let base = cfg.code_dir.trim_end_matches('/');
+    format!("{base}/public")
 }
 
 /// PHP engine execution kind.
@@ -85,6 +144,11 @@ fn default_config() -> RuntimeConfig {
         octane_workers: 0, // disabled by default
         octane_max_memory_mb: 512,
         octane_max_requests: 1000,
+        bind: default_bind(),
+        static_root: String::new(),
+        tls: TlsSettings::default(),
+        redis: RedisSettings::default(),
+        quic: QuicSettings::default(),
     }
 }
 
@@ -108,6 +172,17 @@ pub fn load(path: &str) -> anyhow::Result<()> {
 
     if cfg.max_workers == 0 {
         return Err(anyhow::anyhow!("max_workers must be > 0"));
+    }
+
+    if cfg.bind.parse::<std::net::SocketAddr>().is_err() {
+        return Err(anyhow::anyhow!("invalid bind address: {}", cfg.bind));
+    }
+
+    if cfg.quic.enabled && cfg.quic.bind.parse::<std::net::SocketAddr>().is_err() {
+        return Err(anyhow::anyhow!(
+            "invalid quic bind address: {}",
+            cfg.quic.bind
+        ));
     }
 
     CONFIG.store(Arc::new(cfg));

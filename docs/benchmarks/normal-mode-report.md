@@ -1,7 +1,8 @@
 # Normal Mode benchmark report (M1 pilot)
 
-**Status:** Pilot methodology documented — refresh numbers before GA tag.  
-**Environment:** Alpine Linux musl (`just podman-ci`), `engine = child`, `octane_workers = 0`.
+**Status:** Pilot methodology documented — wrk/k6 numbers still **TBD** before GA tag.  
+**Environment:** Alpine Linux musl (`just podman-ci`), `engine = child`, `octane_workers = 0`.  
+**CI (2026-05-23):** `just podman-ci-fast` / `just podman-ci` green on working tree; soak tests in workspace (e.g. `gateway_soak_30_seconds_memory_stable`) pass in Alpine.
 
 ## Scenarios
 
@@ -43,6 +44,6 @@ Live PHP child paths are validated in Alpine via gateway + config tests; extend 
 
 ## Sign-off
 
-- [ ] Numbers captured on Alpine musl  
-- [ ] Compared against FPM on same host  
-- [ ] Linked from [`docs/public/production-status.md`](../public/production-status.md)
+- [x] Alpine musl workspace + gateway soak tests (`just podman-ci-fast`)  
+- [ ] wrk/k6 P50/P99 compared against FPM on same host  
+- [x] Linked from [`docs/public/production-status.md`](../public/production-status.md)

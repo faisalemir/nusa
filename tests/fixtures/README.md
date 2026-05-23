@@ -2,7 +2,7 @@
 
 ## Laravel minimal (`laravel-minimal/`)
 
-End-to-end fixture for **P2**: real `vendor/`, `bootstrap/app.php`, and `php-driver/bin/octane-rust-worker`.
+End-to-end fixture for **P2**: real `vendor/`, `bootstrap/app.php`, and `php-driver/bin/nusa-octane-worker`.
 
 ### Layout (after setup)
 

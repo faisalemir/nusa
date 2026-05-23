@@ -28,7 +28,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `just podman-test-laravel`, `just podman-ci-e2e`, leak suite, IPC bench smoke
 - IPC `Response.body` accepts JSON string from PHP workers
 
+### Fixed
+- Seccomp exhaustive test no longer calls `apply_seccomp()` in the nextest runner (fixes `podman-ci` hang near end of suite)
+- PHP worker `normalizeIpcBody()` decodes Rust IPC JSON byte arrays so POST bodies reach Laravel (`laravel_post_echo_forwards_request_body`)
+
 ### Changed
+- PHP driver: worker binary renamed to **`nusa-octane-worker`**; Laravel integration via **`NusaOctaneServiceProvider`** (`nusa/octane` package); legacy `octane-rust-worker` / `OctaneRustServiceProvider` removed
+- `docs/public/production-status.md` and `docs/benchmarks/` updated with Alpine CI sign-off evidence (2026-05-23)
 - `README.md` and `AGENTS.md` aligned with Octane dispatch behavior
 - `config.toml.example` documents Octane keys and wasm dev-only policy
 - Migration and runbook under `docs/public/`

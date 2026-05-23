@@ -2,15 +2,15 @@
 
 Laravel lives in PHP. Nusa lives in Rust. Production excellence requires a **thin, explicit bridge**—not stringly-typed shell scripts—so both sides keep their strengths.
 
-The **`nusa/php-driver`** package is that bridge: Composer-installable, Octane-aware, and designed to speak the **Nusa IPC contract** the Rust worker pool already implements.
+The **`nusa/octane`** Composer package (sources in **`php-driver/`**) is that bridge: Composer-installable, Octane-aware, and designed to speak the **Nusa IPC contract** the Rust worker pool already implements.
 
 ---
 
 ## Why a first-party PHP driver exists
 
-| Without a driver | With `nusa/php-driver` |
-|------------------|------------------------|
-| Ad-hoc `php artisan` wrappers per deploy | One worker entrypoint (`octane-rust-worker`) the pool spawns predictably |
+| Without a driver | With `nusa/octane` |
+|------------------|---------------------|
+| Ad-hoc `php artisan` wrappers per deploy | One worker entrypoint (`nusa-octane-worker`) the pool spawns predictably |
 | Unclear bootstrap boundaries | Laravel `bootstrap/app.php` loaded under Octane semantics |
 | Version skew between Rust IPC and PHP | Released together at GA; same handshake version assumptions |
 | Security story only on Rust side | PHP obeys the same app root (`code_dir`) Landlock already trusts |
@@ -21,15 +21,27 @@ You are not “embedding Rust in PHP.” You are **registering PHP as a governed
 
 ## Repository layout
 
-```
+```text
 php-driver/
-├── composer.json          # nusa/php-driver package definition
+├── composer.json              # "name": "nusa/octane"
 ├── bin/
-│   └── octane-rust-worker # Long-lived worker: IPC ↔ Laravel bootstrap
-└── src/                   # Integration classes and hooks
+│   └── nusa-octane-worker     # Long-lived worker: IPC ↔ Laravel bootstrap
+├── config/
+│   └── nusa-octane.php
+└── src/
+    ├── NusaOctaneServiceProvider.php
+    ├── Worker.php
+    └── Commands/OctaneStartCommand.php
 ```
 
-The worker binary is executed by **`nusa-octane-worker`** with:
+| Artifact | Purpose |
+|----------|---------|
+| **`NusaOctaneServiceProvider`** | Registers Octane lifecycle listeners and publishes `nusa-octane` config |
+| **`nusa-octane-worker`** | Executable invoked by `WorkerPool` (see `pool.rs`) |
+
+Legacy names (`octane-rust-worker`, `OctaneRustServiceProvider`) are **not** part of the current tree.
+
+The worker is executed with:
 
 - **Application root** = `code_dir` from `nusa.toml`  
 - **Transport** = framed messages over `nusa-ipc` (handshake, heartbeat, request/response)  
@@ -50,7 +62,7 @@ During development, use a Composer path repository:
     }
   ],
   "require": {
-    "nusa/php-driver": "@dev"
+    "nusa/octane": "@dev"
   }
 }
 ```
@@ -79,7 +91,7 @@ Rust owns **when** to spawn and kill; PHP owns **how** to serve Laravel requests
 
 Point Laravel Octane at the Nusa worker binary instead of RoadRunner’s:
 
-- Binary: `vendor/bin/octane-rust-worker` (or path from package `bin/`)  
+- Binary: `vendor/bin/nusa-octane-worker` or `php-driver/bin/nusa-octane-worker` under `code_dir`  
 - Worker count: driven by **`octane_workers`** in `nusa.toml`, not duplicated blindly in `.env`  
 
 HTTP dispatch through the pool is live in v0.1.0 when `pool.is_ready()`. User guide: [Octane mode](../laravel/octane-mode.md).
@@ -126,6 +138,6 @@ Requires PHP/Laravel in the test image. Default `just podman-test` may not exerc
 
 The PHP driver is small on purpose. Its job is to make Laravel **feel native** inside Nusa while Rust handles everything that should never have been ini files: **concurrency, kernel policy, metrics, and failure containment**.
 
-When HTTP Octane dispatch (P1) lands, the same package you install today becomes the **performance story** teams migrated from RoadRunner to capture—without surrendering observability or sandbox discipline.
+With HTTP Octane dispatch wired in v0.1.0, the same package you install today is the **performance story** teams migrated from RoadRunner to capture—without surrendering observability or sandbox discipline.
 
 That is the ecosystem bet: **Laravel’s soul, Rust’s spine.** This package is where they shake hands.

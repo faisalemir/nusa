@@ -58,32 +58,30 @@ RoadRunner and FrankenPHP proved that **bootstrap once, serve many** transforms 
 
 | Concept | RoadRunner / FrankenPHP | Nusa |
 |---------|-------------------------|------|
-| Long-lived workers | Core idea | `octane_workers` + `php-driver` worker |
+| Long-lived workers | Core idea | `octane_workers` + `nusa/octane` (`nusa-octane-worker`) |
 | HTTP front | Separate service or module | `nusa-gateway` (Axum) |
 | Worker reset | Manual / plugin-specific | `StateResetOrchestrator` + memory/request recycle config |
 | IPC | RR-specific or in-process | Framed **nusa-ipc** with handshake and heartbeat |
 
 ### v0.1.0 caveat (read before cutover)
 
-The **worker pool and IPC stack exist** and are tested. The **gateway HTTP handler** still routes through `engine.execute` until **P1** connects pool readiness to request dispatch.
+The **worker pool, IPC stack, and gateway HTTP dispatch** are wired in v0.1.0 when `pool.is_ready()`. Pre-GA gates still apply:
 
-Until your environment validates P1:
-
-- Treat Nusa as **Normal mode + worker bootstrap rehearsal** for Octane  
-- Do not expect identical RR throughput numbers on HTTP alone  
-- Use [Production status](production-status.md) as the gate for “Octane production ready”
-
-After P1, the same `nusa.toml` you staged should unlock the throughput story without swapping binaries.
+- Validate on **Alpine musl** (`just podman-ci` / `just podman-ci-e2e`) before production traffic  
+- Use [Production status](production-status.md) for benchmark and release KPIs  
+- Install **`nusa/octane`** with binary **`nusa-octane-worker`** (not legacy `octane-rust-worker`)
 
 ---
 
 ## Composer and the PHP driver
 
-The bridge from Rust orchestration to Laravel bootstrap is **`nusa/php-driver`**:
+The bridge from Rust orchestration to Laravel bootstrap is the **`nusa/octane`** Composer package (`php-driver/`):
 
 1. Add a path or VCS repository to `php-driver/` (see [ecosystem/package-guidelines.md](ecosystem/package-guidelines.md)).  
-2. Require the package in your Laravel app.  
-3. Configure Octane (when HTTP dispatch is live) to use **`octane-rust-worker`**.  
+2. Require **`nusa/octane`** in your Laravel app (`NusaOctaneServiceProvider` auto-discovers).  
+3. Point Octane / the pool at **`nusa-octane-worker`** (`bin/nusa-octane-worker` or `vendor/bin/nusa-octane-worker`).  
+
+Legacy worker names (`octane-rust-worker`, `OctaneRustServiceProvider`) are removed—use the names above.  
 
 The worker expects a real Laravel tree: `vendor/`, `bootstrap/app.php`, Octane-compatible boot.
 

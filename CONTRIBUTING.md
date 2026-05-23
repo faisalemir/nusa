@@ -31,7 +31,7 @@ Production runs on **Alpine Linux musl**. Tests must not game results for a gree
 - **Before push:** `just podman-ci` (authoritative) — not host `just ci` alone.
 - **No silent skips:** Linux Landlock/Seccomp/integration tests must fail closed if enforcement cannot be verified — no `eprintln` + pass.
 - **Stubs:** Document `// STUB_CONTRACT:`; assert expected errors on stub paths; add Alpine integration coverage for real behavior.
-- **Details:** `.cursor/rules/nusa-standards.mdc` → Production Test Integrity; `.cursor/skills/rust-test/SKILL.md`.
+- **Details:** `docs/contributor/testing.md` and `.cursor/skills/rust-test/SKILL.md` (router: `.cursor/rules/nusa-standards.mdc`).
 
 ## Documentation
 

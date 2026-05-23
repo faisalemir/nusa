@@ -4,7 +4,7 @@
 
 ## Do I need to learn Rust?
 
-No. You configure **`nusa.toml`**, install **`nusa/php-driver`** for Octane mode, and run Laravel as usual.
+No. You configure **`nusa.toml`**, install **`nusa/octane`** for Octane mode, and run Laravel as usual.
 
 ---
 

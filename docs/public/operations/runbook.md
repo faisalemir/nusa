@@ -36,10 +36,10 @@ Load balancer
 │  • Prometheus /metrics          │
 └──────────────┬──────────────────┘
                ▼
-        PHP engine (Normal)  OR  Worker pool (Octane, P1 HTTP)
+        PHP engine (Normal)  OR  Worker pool (Octane + IPC)
 ```
 
-When Octane HTTP dispatch (P1) is live, readiness must reflect **pool health**, not only process start.
+Readiness reflects **gateway health** and, when `octane_workers > 0`, **worker pool** `is_ready()`.
 
 ---
 
@@ -50,15 +50,13 @@ When Octane HTTP dispatch (P1) is live, readiness must reflect **pool health**, 
 | **Liveness** | `GET /health` | HTTP 200 | Restart if process wedged |
 | **Readiness** | `GET /ready` | HTTP 200 when `HealthState` is ready | Remove from service pool |
 
-### Readiness limitation (v0.1.0)
+### Readiness with Octane (v0.1.0)
 
-`/ready` today reflects **gateway health state**, not full **Octane worker pool** verification. If you run `octane_workers > 0`:
+When `octane_workers > 0`, **`GET /ready`** returns **503** unless both gateway health is ready **and** `WorkerPool::is_ready()` is true. CLI startup **exits** if the pool cannot initialize.
 
-- Treat logs about pool init failure as **severity 1** even if readiness passes  
-- Do not route production traffic until P1 fail-closed behavior ships  
-- Document temporary manual checks (worker count, IPC heartbeat logs)
-
-After P1: readiness must return **503** when Octane is required but pool is missing or not ready.
+- Treat pool init errors at startup as **severity 1**  
+- Worker binary: **`nusa-octane-worker`** from package **`nusa/octane`** (`php-driver/`)  
+- See [PHP driver](../laravel/php-driver.md) and [Octane mode](../laravel/octane-mode.md)
 
 ---
 

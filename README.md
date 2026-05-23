@@ -39,7 +39,7 @@ You still run **`php artisan`**, **Composer**, **Eloquent**, and your **`routes/
   nusa (HTTP + /health /ready /metrics)
      │
      ├─ Normal  → PHP per request
-     └─ Octane  → Laravel workers (nusa/php-driver) over IPC
+     └─ Octane  → Laravel workers (`nusa/octane`, `nusa-octane-worker`) over IPC
 ```
 
 Octane mode **fails closed**: if workers cannot start, `nusa` exits and `/ready` returns 503 until the pool is healthy.
@@ -87,7 +87,7 @@ curl http://127.0.0.1:8080/
 cargo run -p nusa-cli -- dev --pretty
 ```
 
-**Enable Octane:** install [nusa/php-driver](docs/public/laravel/php-driver.md), set `octane_workers > 0`, restart. Details: [Octane mode](docs/public/laravel/octane-mode.md).
+**Enable Octane:** install [nusa/octane](docs/public/laravel/php-driver.md) (`php-driver/`), set `octane_workers > 0`, restart. Details: [Octane mode](docs/public/laravel/octane-mode.md).
 
 ---
 
@@ -154,11 +154,11 @@ For Octane mode, add the path package and run `composer install`:
 ```json
 {
   "repositories": [{ "type": "path", "url": "../php-driver" }],
-  "require": { "nusa/php-driver": "@dev" }
+  "require": { "nusa/octane": "@dev" }
 }
 ```
 
-Worker binary: `octane-rust-worker`. Step-by-step: [PHP driver package](docs/public/laravel/php-driver.md).
+Worker binary: `nusa-octane-worker`. Step-by-step: [PHP driver package](docs/public/laravel/php-driver.md).
 
 ---
 

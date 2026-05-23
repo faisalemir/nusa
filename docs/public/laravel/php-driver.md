@@ -1,6 +1,6 @@
-# PHP driver package (`nusa/php-driver`)
+# PHP driver package (`nusa/octane`)
 
-The **`nusa/php-driver`** Composer package connects Laravel to Nusa’s worker pool. It provides the long-lived worker entrypoint **`octane-rust-worker`** that Nusa spawns in Octane mode.
+The **`nusa/octane`** Composer package (source in the repo directory **`php-driver/`**) connects Laravel to Nusa’s worker pool. It registers **`Nusa\Octane\NusaOctaneServiceProvider`** and ships the long-lived worker binary **`nusa-octane-worker`** that Nusa spawns in Octane mode.
 
 ---
 
@@ -8,10 +8,30 @@ The **`nusa/php-driver`** Composer package connects Laravel to Nusa’s worker p
 
 | Piece | Role |
 |-------|------|
-| `bin/octane-rust-worker` | Boots Laravel once, speaks IPC, serves many requests |
-| Package classes | Hooks compatible with Octane-style worker lifecycle |
+| `NusaOctaneServiceProvider` | Auto-discovered Laravel provider: Octane event listeners, config publish |
+| `bin/nusa-octane-worker` | Boots Laravel once, speaks IPC, serves many requests |
+| `config/nusa-octane.php` | Optional published config (`php artisan vendor:publish --tag=nusa-config`) |
 
 Rust owns spawn, recycle, and health. PHP owns Laravel inside the sandbox.
+
+---
+
+## Package layout
+
+```text
+php-driver/
+├── composer.json              # name: nusa/octane
+├── bin/
+│   └── nusa-octane-worker     # Worker entrypoint (replaces legacy octane-rust-worker)
+├── config/
+│   └── nusa-octane.php
+└── src/
+    ├── NusaOctaneServiceProvider.php
+    ├── Worker.php
+    └── Commands/OctaneStartCommand.php
+```
+
+**Naming (v0.1.0):** The worker binary is **`nusa-octane-worker`**. The service provider class is **`NusaOctaneServiceProvider`** in namespace **`Nusa\Octane`**. Older names (`octane-rust-worker`, `OctaneRustServiceProvider`, `NusaRs\OctaneDriver`) are removed.
 
 ---
 
@@ -31,20 +51,29 @@ If Nusa and your app live on the same machine:
     }
   ],
   "require": {
-    "nusa/php-driver": "@dev"
+    "nusa/octane": "@dev"
   }
 }
 ```
 
 ```bash
-composer update nusa/php-driver
+composer update nusa/octane
 ```
+
+Laravel auto-discovers **`Nusa\Octane\NusaOctaneServiceProvider`** via `extra.laravel.providers` in the driver’s `composer.json`. You normally do not register it manually in `config/app.php`.
 
 Confirm the binary exists:
 
 ```bash
-ls -la vendor/nusa/php-driver/bin/octane-rust-worker
-# or symlink: php-driver/bin/octane-rust-worker at project root (CI pattern)
+ls -la vendor/nusa/octane/bin/nusa-octane-worker
+# or symlink at project root (CI pattern):
+ls -la php-driver/bin/nusa-octane-worker
+```
+
+Composer also exposes:
+
+```bash
+vendor/bin/nusa-octane-worker
 ```
 
 ### Production
@@ -60,10 +89,16 @@ Alpine CI uses:
 ```text
 my-laravel-app/
 ├── php-driver → symlink to repo php-driver/
-└── vendor/...
+└── vendor/nusa/octane/...
 ```
 
-Entrypoint invoked as: `php-driver/bin/octane-rust-worker` relative to `code_dir`.
+Nusa’s pool spawns the worker relative to `code_dir`, typically:
+
+```text
+php-driver/bin/nusa-octane-worker
+```
+
+See `crates/nusa-octane-worker/src/pool.rs` and `tests/fixtures/laravel-minimal/`.
 
 ---
 
@@ -83,7 +118,7 @@ Before enabling `octane_workers` in production:
 
 If you use **`laravel/octane`** for local tooling:
 
-- Set the worker binary to Nusa’s `octane-rust-worker` instead of RoadRunner’s `rr`.  
+- Set the worker binary to **`nusa-octane-worker`** (not RoadRunner’s `rr`).  
 - Disable duplicate HTTP servers—only **one** process should listen (Nusa gateway).  
 
 Nusa already embeds the gateway; you do not run `rr serve` alongside `nusa`.
@@ -92,7 +127,7 @@ Nusa already embeds the gateway; you do not run `rr serve` alongside `nusa`.
 
 ## Version alignment
 
-Keep **`nusa/php-driver`** on the same release line as the `nusa` binary. IPC handshake assumes compatible message formats.
+Keep **`nusa/octane`** on the same release line as the `nusa` binary. IPC handshake assumes compatible message formats.
 
 ---
 

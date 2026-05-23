@@ -74,9 +74,19 @@ fn bluegreen_prepare_overwrites_previous_standby() {
 // ── Switch Deployment ──
 
 #[test]
+fn bluegreen_mark_standby_healthy_enables_health_check() {
+    let deployer = BlueGreenDeployer::new(Router::new());
+    deployer.prepare_deployment("green", Router::new());
+    assert!(!deployer.health_check_standby());
+    deployer.mark_standby_healthy();
+    assert!(deployer.health_check_standby());
+}
+
+#[test]
 fn bluegreen_switch_marks_new_active_healthy() {
     let deployer = BlueGreenDeployer::new(Router::new());
     deployer.prepare_deployment("green", Router::new());
+    deployer.mark_standby_healthy();
     deployer.switch();
     assert!(deployer.active().healthy);
     assert_eq!(deployer.active().name, "green");

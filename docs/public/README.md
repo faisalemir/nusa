@@ -38,7 +38,7 @@ Structured guides written for day-to-day Laravel work:
 | [Configuration for Laravel](laravel/configuration-for-laravel.md) | `code_dir`, `storage/`, Octane knobs |
 | [Normal mode (FPM-like)](laravel/normal-mode.md) | `octane_workers = 0`, when to use it |
 | [Octane mode](laravel/octane-mode.md) | Workers, driver, IPC, readiness |
-| [PHP driver package](laravel/php-driver.md) | Composer, `octane-rust-worker` |
+| [PHP driver package](laravel/php-driver.md) | `nusa/octane`, `NusaOctaneServiceProvider`, `nusa-octane-worker` |
 | [HTTP, routes, headers](laravel/routes-http-and-headers.md) | GET/POST, query strings, tracing |
 | [Local development](laravel/local-development.md) | `nusa dev`, hot reload |
 | [Deploy checklist](laravel/deployment-checklist.md) | Staging → production |

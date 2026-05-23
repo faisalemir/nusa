@@ -10,23 +10,9 @@
 #![warn(clippy::all)]
 
 use clap::Parser;
-use std::sync::Arc;
 
+use nusa_cli::server::{StartMode, start_server};
 use nusa_cli::{Cli, Commands};
-use nusa_config::EngineKind;
-use nusa_core::{
-    BackpressureGuard, PhpEngine, ResourceGuard, TaskManager, TenantRateLimiter, TenantRegistry,
-};
-use nusa_gateway::bluegreen::BlueGreenDeployer;
-use nusa_gateway::circuit_breaker::CircuitBreaker;
-use nusa_gateway::health::HealthState;
-use nusa_gateway::sse::SseManager;
-use nusa_gateway::static_files::StaticFileHandler;
-use nusa_gateway::tenant_circuit_breaker::TenantCircuitBreakers;
-use nusa_gateway::websocket::WsManager;
-use nusa_plugin_api::PluginRegistry;
-use nusa_telemetry::metrics::NusaMetrics;
-use std::time::Duration;
 
 /// Binary entrypoint (m06-error-handling: anyhow for app-level errors)
 /// m12-lifecycle: explicit init→serve→shutdown phases
@@ -34,41 +20,34 @@ use std::time::Duration;
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
-    // Dispatch subcommands (domain-cli)
     if let Some(cmd) = cli.command {
         return handle_subcommand(cmd).await;
     }
 
-    // Default: start the server
-    start_server(&cli.config).await
+    start_server(&cli.config, StartMode::Default, None).await
 }
 
 /// Handle CLI subcommands (nusa dev, nusa test, nusa deploy, nusa rollback).
 async fn handle_subcommand(cmd: Commands) -> anyhow::Result<()> {
-    // Init telemetry first
     nusa_telemetry::init()?;
 
     match cmd {
         Commands::Dev {
-            watch,
+            watch: _watch,
             debounce,
             pretty,
         } => {
-            // F4: nusa dev — hot-reload development mode
-            tracing::info!("🔥 Nusa dev mode — watching directories: {}", watch);
+            tracing::info!("Nusa dev mode — hot-reload enabled");
             let app_root = std::env::current_dir()?;
             let mut watcher = nusa_cli::dev::DevWatcher::new(debounce, pretty);
             watcher.start(&app_root)?;
-
-            // Also start the server
-            start_server(&cli_config_path()).await
+            start_server(&cli_config_path(), StartMode::Default, Some(watcher)).await
         }
         Commands::Test {
             path,
             workers,
             reset,
         } => {
-            // F5: nusa test — persistent test runner
             tracing::info!("Running tests from {} with {} workers", path, workers);
             let mut runner = nusa_cli::test::TestRunner::new(nusa_cli::test::TestConfig {
                 workers,
@@ -81,190 +60,24 @@ async fn handle_subcommand(cmd: Commands) -> anyhow::Result<()> {
             Ok(())
         }
         Commands::Deploy { strategy, config } => {
-            // F6: nusa deploy — blue-green deployment
-            tracing::info!(
-                "Deploying with strategy: {} (config: {:?})",
-                strategy,
-                config
-            );
-            let config_path = config.unwrap_or_else(cli_config_path);
-            start_server(&config_path).await
+            tracing::info!("Deploying with strategy: {}", strategy);
+            let blue = cli_config_path();
+            let green = config.unwrap_or_else(cli_config_path);
+            start_server(
+                &blue,
+                StartMode::Deploy {
+                    blue_config: blue.clone(),
+                    green_config: green,
+                },
+                None,
+            )
+            .await
         }
         Commands::Rollback => {
-            // F6: nusa rollback
-            tracing::info!("Rolling back to previous deployment");
-            start_server(&cli_config_path()).await
+            tracing::info!("Rolling back to previous deployment config");
+            start_server("", StartMode::Rollback, None).await
         }
     }
-}
-
-/// Start the Nusa PHP Runtime server.
-async fn start_server(config_path: &str) -> anyhow::Result<()> {
-    // 1. Init Telemetry (before any app logic)
-    let obs = nusa_telemetry::init()?;
-    let prometheus_handle = Arc::new(obs.prometheus_handle);
-
-    // 2. Load Config (figment: file → env → defaults)
-    nusa_config::load(config_path)?;
-    let _watcher = nusa_config::watch(config_path.to_string());
-
-    let cfg = nusa_config::get();
-
-    // 3. Initialize Engine based on config (m04-zero-cost: dyn dispatch)
-    let engine: Arc<dyn PhpEngine> = match cfg.engine {
-        EngineKind::Ffi => Arc::new(nusa_engine_ffi::FfiEngine::new(cfg.max_workers)),
-        EngineKind::Wasm => {
-            if std::env::var("NUSA_ALLOW_WASM_STUB").is_err() {
-                anyhow::bail!(
-                    "engine=wasm is dev-only (WasmEngine::stub); use engine=child for production \
-                     or set NUSA_ALLOW_WASM_STUB=1 for local experiments"
-                );
-            }
-            Arc::new(nusa_engine_wasm::WasmEngine::stub())
-        }
-        EngineKind::Child => Arc::new(nusa_engine_child::ChildEngine::with_default_php()),
-    };
-
-    // 4. Apply Security BEFORE axum::serve (m15-anti-pattern: security first)
-    nusa_security::apply_landlock(cfg.code_dir.as_ref(), cfg.tmp_dir.as_ref())?;
-    nusa_security::apply_seccomp()?;
-
-    // 5. Initialize Plugins
-    let plugins = Arc::new(PluginRegistry::new());
-
-    // 6. Circuit Breaker (m13-domain-error)
-    let circuit_breaker = Arc::new(CircuitBreaker::new(5, Duration::from_secs(30)));
-
-    // 7. Health State
-    let health_state = Arc::new(HealthState::new());
-
-    // 8. Backpressure Guard
-    let backpressure = Arc::new(BackpressureGuard::new(cfg.max_workers));
-
-    // 9. Resource Guard
-    let resource_guard = ResourceGuard {
-        max_request_bytes: 10 * 1024 * 1024, // 10MB default
-        request_timeout_ms: cfg.timeout_ms,
-        max_concurrent: cfg.max_workers,
-    };
-
-    // 10. Tenant Registry (M4: multi-tenant)
-    let tenants = Arc::new(TenantRegistry::new());
-
-    // 11. Task Manager (M4: async task offload)
-    let tasks = Arc::new(TaskManager::new());
-
-    // 12. Tenant Rate Limiter (D2)
-    let rate_limiter = Arc::new(TenantRateLimiter::new(1000, 50));
-
-    // 13. Tenant Circuit Breaker (D3)
-    let tenant_cb = Arc::new(TenantCircuitBreakers::new(5, Duration::from_secs(30)));
-
-    // 14. WebSocket Manager (F1)
-    let ws_manager = Arc::new(WsManager::new());
-
-    // 15. SSE Manager (F2)
-    let sse_manager = Arc::new(SseManager::new());
-
-    // 16. Static File Handler (E1)
-    let static_handler = Arc::new(StaticFileHandler::new("/app/public".into()));
-
-    // 17. Metrics (A1)
-    let metrics = Arc::new(NusaMetrics::init());
-
-    // 18. Octane Worker Pool (M2) — fail closed when configured but PHP/IPC unavailable
-    let octane_pool = match nusa_cli::octane_pool::init_octane_pool(
-        cfg.octane_workers,
-        std::path::PathBuf::from(&cfg.code_dir),
-        cfg.octane_max_memory_mb,
-        cfg.octane_max_requests,
-    )
-    .await?
-    {
-        Some(pool) => {
-            tracing::info!(
-                "Octane worker pool ready with {} workers",
-                cfg.octane_workers
-            );
-            Some(pool)
-        }
-        None => None,
-    };
-    let octane_pool = Arc::new(tokio::sync::Mutex::new(octane_pool));
-    let mut octane_reset = nusa_octane_worker::state_reset::StateResetOrchestrator::new(128);
-    octane_reset.initialize();
-    let octane_reset = Arc::new(parking_lot::Mutex::new(octane_reset));
-
-    // 19. Blue-Green Deployer (F6)
-    let _deployer = BlueGreenDeployer::new(nusa_gateway::app(
-        engine.clone(),
-        plugins.clone(),
-        circuit_breaker.clone(),
-        health_state.clone(),
-        backpressure.clone(),
-        resource_guard.clone(),
-        tenants.clone(),
-        tasks.clone(),
-        rate_limiter.clone(),
-        tenant_cb.clone(),
-        ws_manager.clone(),
-        sse_manager.clone(),
-        static_handler.clone(),
-        metrics.clone(),
-        prometheus_handle.clone(),
-        octane_pool.clone(),
-        octane_reset.clone(),
-    ));
-
-    // 20. Start Gateway
-    let app = nusa_gateway::app(
-        engine.clone(),
-        plugins,
-        circuit_breaker,
-        health_state.clone(),
-        backpressure,
-        resource_guard,
-        tenants,
-        tasks,
-        rate_limiter,
-        tenant_cb,
-        ws_manager,
-        sse_manager,
-        static_handler,
-        metrics,
-        prometheus_handle.clone(),
-        octane_pool.clone(),
-        octane_reset.clone(),
-    );
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await?;
-
-    // Mark as ready after successful startup
-    health_state.mark_ready();
-
-    tracing::info!("nusa listening on 0.0.0.0:8080");
-
-    // 20. Graceful Shutdown (m12-lifecycle)
-    let octane_pool_shutdown = octane_pool.clone();
-    let shutdown = async move {
-        tokio::signal::ctrl_c().await.ok();
-        tracing::info!("nusa shutdown signal received");
-
-        // Shutdown Octane worker pool if active
-        // Extract pool first to avoid holding MutexGuard across await
-        let pool_opt = octane_pool_shutdown.lock().await.take();
-
-        if let Some(mut pool) = pool_opt {
-            let _ = pool.shutdown().await;
-        }
-
-        engine.shutdown().await;
-    };
-
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown)
-        .await?;
-
-    Ok(())
 }
 
 fn cli_config_path() -> String {

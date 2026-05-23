@@ -9,8 +9,10 @@
 #![warn(clippy::all)]
 #![allow(missing_docs)]
 
+pub mod deploy;
 pub mod dev;
 pub mod octane_pool;
+pub mod server;
 pub mod test;
 
 use clap::{Parser, Subcommand};

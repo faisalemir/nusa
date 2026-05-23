@@ -16,7 +16,7 @@ octane_max_requests = 1000
 
 | Requirement | Why |
 |-------------|-----|
-| [PHP driver installed](php-driver.md) | Worker binary `octane-rust-worker` |
+| [PHP driver installed](php-driver.md) | Package `nusa/octane`, binary `nusa-octane-worker` |
 | `composer install` under `code_dir` | Laravel bootstrap |
 | Linux staging (recommended) | Matches production sandbox + CI |
 | Enough RAM | ~512 MB × workers (rule of thumb—measure your app) |
@@ -43,7 +43,7 @@ When the pool is **not** ready, the gateway returns **503** for application rout
 
 With `octane_workers > 0`:
 
-1. Nusa spawns workers using `php-driver/bin/octane-rust-worker`.  
+1. Nusa spawns workers using `php-driver/bin/nusa-octane-worker` (or `vendor/nusa/octane/bin/nusa-octane-worker`).  
 2. Each worker completes an IPC **handshake**.  
 3. If initialization fails or no worker has transport, **`nusa` exits** with an error.  
 4. **`/ready`** stays **503** until `pool.is_ready()` is true.  
@@ -82,7 +82,7 @@ This limits slow leaks in long-lived Laravel processes (static caches, accidenta
 
 Point Octane at the Nusa worker binary (when using Laravel’s Octane package for tooling):
 
-- Worker command: `php vendor/bin/octane-rust-worker` (path depends on Composer layout)  
+- Worker command: `php vendor/bin/nusa-octane-worker` (path depends on Composer layout)  
 
 Your `config/octane.php` may still list RoadRunner options—replace worker command with Nusa’s driver per [PHP driver package](php-driver.md).
 

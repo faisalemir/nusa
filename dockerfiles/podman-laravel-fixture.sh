@@ -29,4 +29,4 @@ fi
 
 test -f vendor/autoload.php
 test -f vendor/nusa/octane/src/Worker.php
-test -f php-driver/bin/octane-rust-worker
+test -f php-driver/bin/nusa-octane-worker

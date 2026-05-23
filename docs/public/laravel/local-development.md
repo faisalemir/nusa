@@ -58,7 +58,7 @@ Avoid `config:cache` while actively editing `config/*.php` unless you intentiona
 ## Debugging Octane locally
 
 1. Start with `octane_workers = 1` to simplify logs.  
-2. Confirm driver: `php vendor/.../octane-rust-worker --help` or run via pool logs.  
+2. Confirm driver: `ls vendor/nusa/octane/bin/nusa-octane-worker` or `vendor/bin/nusa-octane-worker`; check pool logs on spawn.  
 3. Use fixture routes (`/nusa-ping`) if you cloned the Nusa repo with `tests/fixtures/laravel-minimal`.  
 
 Linux or WSL gives the closest behavior to Alpine production.

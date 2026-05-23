@@ -129,7 +129,7 @@ podman-laravel-fixture-sh := 'sh dockerfiles/podman-laravel-fixture.sh && '
 
 # Workspace tests only (live source; no nusa-e2e-tests)
 podman-test-workspace:
-    podman run --rm -t {{podman-run-mount}} nusa-test-runner sh -c "{{podman-cargo-sh}} cargo nextest run --workspace {{workspace-test-excludes}} --exclude nusa-cli --test-threads 4"
+    podman run --rm -t {{podman-run-mount}} nusa-test-runner sh -c "{{podman-cargo-sh}} cargo nextest run --workspace {{workspace-test-excludes}} --exclude nusa-cli --exclude nusa-e2e-tests --test-threads 4"
 
 # Laravel / Octane E2E package only (serial)
 podman-test-e2e:

@@ -89,7 +89,7 @@ Environment overrides use prefix **`NUSA_`** (e.g. `NUSA_CODE_DIR` in Kubernetes
 
 ## PHP driver (Octane mode only)
 
-If you plan **`octane_workers > 0`**, install **`nusa/php-driver`** before enabling workers:
+If you plan **`octane_workers > 0`**, install **`nusa/octane`** (from `php-driver/`) before enabling workers:
 
 → [PHP driver package](php-driver.md)
 

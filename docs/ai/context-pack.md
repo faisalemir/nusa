@@ -80,8 +80,9 @@ There is **no** `/admin/recycle-all` route in `nusa-gateway` today — do not do
 
 ## PHP / Laravel driver
 
-- Composer package skeleton: `php-driver/`
-- Worker script: `php-driver/bin/octane-rust-worker`
+- Composer package: **`nusa/octane`** (sources in `php-driver/`)
+- Service provider: **`Nusa\Octane\NusaOctaneServiceProvider`**
+- Worker binary: **`php-driver/bin/nusa-octane-worker`** (legacy `octane-rust-worker` removed)
 - Requires Laravel app with `vendor/` and `bootstrap/app.php` for real Octane workers
 
 ## Quality rules (summary)

@@ -13,16 +13,18 @@ sequenceDiagram
 
     Client->>Gateway: HTTP request
     Gateway->>Gateway: middleware rate_limit circuit
+    Gateway->>Gateway: plugins run_pre_exec
     Gateway->>Engine: execute RequestContext
+    Gateway->>Gateway: plugins run_post_exec
     Engine->>PHP: run script
     PHP-->>Engine: response
     Engine-->>Gateway: EngineResponse
     Gateway-->>Client: HTTP response
 ```
 
-Entry: [`crates/nusa-gateway/src/lib.rs`](../../crates/nusa-gateway/src/lib.rs) `handler` → `state.engine.execute(ctx)`.
+Entry: [`crates/nusa-gateway/src/lib.rs`](../../crates/nusa-gateway/src/lib.rs) `handler` → plugins → `state.engine.execute(ctx)` when `octane_workers = 0`.
 
-## Request path (Octane — intended, incomplete)
+## Request path (Octane)
 
 ```mermaid
 sequenceDiagram
@@ -32,15 +34,27 @@ sequenceDiagram
     participant Worker as PHP_Octane_worker
 
     Client->>Gateway: HTTP request
-    Note over Gateway: P1: branch when octane_pool ready
+    Gateway->>Gateway: plugins run_pre_exec
+    Note over Gateway: branch when octane_pool ready
     Gateway->>Pool: handle_http_request
+    Gateway->>Gateway: plugins run_post_exec
     Pool->>Worker: IPC
     Worker-->>Pool: response
     Pool-->>Gateway: response
     Gateway-->>Client: HTTP response
 ```
 
-Today: pool may be initialized in CLI [`main.rs`](../../crates/nusa-cli/src/main.rs) but gateway still uses **engine.execute** only.
+When `octane_workers > 0` and `pool.is_ready()`, the gateway uses **`WorkerPool::handle_http_request`** instead of `engine.execute`. See [`crates/nusa-cli/src/server.rs`](../../crates/nusa-cli/src/server.rs).
+
+## PHP driver (`nusa/octane`)
+
+| Artifact | Path |
+|----------|------|
+| Composer package | `php-driver/composer.json` (`name`: `nusa/octane`) |
+| Service provider | `php-driver/src/NusaOctaneServiceProvider.php` |
+| Worker binary | `php-driver/bin/nusa-octane-worker` |
+
+The pool resolves the worker script under `code_dir` (see `crates/nusa-octane-worker/src/pool.rs`). User-facing install guide: [`docs/public/laravel/php-driver.md`](../public/laravel/php-driver.md).
 
 ## Process lifecycle (CLI)
 
@@ -49,7 +63,12 @@ Today: pool may be initialized in CLI [`main.rs`](../../crates/nusa-cli/src/main
 3. Construct `PhpEngine` from `engine` kind
 4. Apply Landlock + seccomp (`nusa-security`)
 5. Build gateway `AppState` (plugins, circuit breakers, tenants, tasks, WS, SSE, metrics, **octane_pool**)
-6. `axum::serve`
+6. Optional: Redis broadcast, experimental TLS/QUIC (feature flags)
+7. `BlueGreenDeployer` + `axum::serve` on `bind` (see `nusa deploy` / `nusa rollback`)
+
+## Plugins
+
+`PluginRegistry` runs **`run_pre_exec`** before PHP/Octane execution and **`run_post_exec`** after a successful response. Register plugins on the registry passed to `nusa_gateway::app()`.
 
 ## Major components
 

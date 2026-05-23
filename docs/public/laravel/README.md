@@ -47,7 +47,7 @@ This section is the **primary documentation** for teams building and shipping La
 | [Configuration for Laravel](configuration-for-laravel.md) | Paths, env, Octane settings for real apps |
 | [Normal mode](normal-mode.md) | FPM-like request lifecycle |
 | [Octane mode](octane-mode.md) | Worker pool, readiness, performance |
-| [PHP driver package](php-driver.md) | Composer install and worker binary |
+| [PHP driver package](php-driver.md) | `nusa/octane`, `NusaOctaneServiceProvider`, `nusa-octane-worker` |
 | [HTTP, routes, headers](routes-http-and-headers.md) | How requests reach Laravel |
 | [Local development](local-development.md) | `nusa dev`, watching files |
 | [Deploy checklist](deployment-checklist.md) | Staging and production steps |
@@ -66,7 +66,7 @@ This section is the **primary documentation** for teams building and shipping La
 | Normal mode | Like php-fpm: new request context each time |
 | Octane mode | Like `php artisan octane:start` with Nusa-managed workers |
 | `/ready` | Load balancer “can this instance take traffic?” |
-| `nusa/php-driver` | Worker entrypoint instead of `rr` or `frankenphp` binary |
+| `nusa/octane` | Composer package: `NusaOctaneServiceProvider` + `nusa-octane-worker` binary (not `rr` / FrankenPHP) |
 
 You do **not** need to read Rust source to run Laravel on Nusa.
 

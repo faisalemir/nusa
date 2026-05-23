@@ -3,7 +3,6 @@
 //! Covers: repeated filter builds, Landlock apply lock contention, no silent
 //! resource growth from security API calls.
 
-use std::path::Path;
 use std::sync::{Arc, Barrier};
 use std::thread;
 
@@ -93,16 +92,15 @@ fn resource_landlock_apply_lock_serializes_threads() {
         let b = barrier.clone();
         handles.push(thread::spawn(move || {
             b.wait();
-            let _ = apply_landlock(c.as_path(), t.as_path());
+            apply_landlock(c.as_path(), t.as_path())
         }));
     }
     let mut ok_count = 0usize;
     let mut err_count = 0usize;
     for h in handles {
         match h.join().expect("join") {
-            Ok(Ok(())) => ok_count += 1,
-            Ok(Err(_)) => err_count += 1,
-            Err(_) => panic!("thread panicked"),
+            Ok(()) => ok_count += 1,
+            Err(_) => err_count += 1,
         }
     }
     assert!(
@@ -121,6 +119,7 @@ fn resource_landlock_apply_lock_serializes_threads() {
 fn resource_apply_landlock_non_linux_no_fd_leak() {
     #[cfg(not(target_os = "linux"))]
     {
+        use std::path::Path;
         let start = count_open_fds();
         for _ in 0..200 {
             let _ = apply_landlock(Path::new("/code"), Path::new("/tmp"));

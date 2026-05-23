@@ -2451,6 +2451,7 @@ dependencies = [
  "anyhow",
  "axum",
  "clap",
+ "metrics-exporter-prometheus",
  "notify",
  "nusa-config",
  "nusa-core",
@@ -2464,7 +2465,9 @@ dependencies = [
  "nusa-security",
  "nusa-telemetry",
  "parking_lot",
+ "serde",
  "tokio",
+ "toml 0.8.23",
  "tracing",
 ]
 

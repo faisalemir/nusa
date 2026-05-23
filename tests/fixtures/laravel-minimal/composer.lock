@@ -2593,7 +2593,7 @@
                 "php": "^8.2"
             },
             "bin": [
-                "bin/octane-rust-worker"
+                "bin/nusa-octane-worker"
             ],
             "type": "library",
             "extra": {

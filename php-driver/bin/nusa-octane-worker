@@ -6,7 +6,7 @@
  * This binary boots Laravel once and communicates with the Nusa
  * Rust orchestrator via framed IPC over Unix Domain Sockets.
  *
- * Usage: php bin/octane-rust-worker /path/to/worker.sock
+ * Usage: php bin/nusa-octane-worker /path/to/worker.sock
  *
  * @package Nusa\Octane
  */
@@ -18,7 +18,7 @@ use Nusa\Octane\Worker;
 $socketPath = $argv[1] ?? null;
 
 if (!$socketPath) {
-    fwrite(STDERR, "Usage: php octane-rust-worker <socket-path>\n");
+    fwrite(STDERR, "Usage: php nusa-octane-worker <socket-path>\n");
     exit(1);
 }
 

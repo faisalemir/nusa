@@ -54,7 +54,7 @@ RUN apk add --no-cache \
     && chmod -R a+rwX storage bootstrap/cache database \
     && COMPOSER_ALLOW_SUPERUSER=1 php /usr/bin/composer install --no-interaction --prefer-dist --no-progress \
     && test -f vendor/autoload.php \
-    && test -f php-driver/bin/octane-rust-worker
+    && test -f php-driver/bin/nusa-octane-worker
 
 ENV NUSA_LARAVEL_FIXTURE=/src/tests/fixtures/laravel-minimal
 

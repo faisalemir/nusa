@@ -28,7 +28,7 @@
         }
     },
     "bin": [
-        "bin/octane-rust-worker"
+        "bin/nusa-octane-worker"
     ],
     "config": {
         "optimize-autoloader": true,

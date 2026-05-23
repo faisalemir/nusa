@@ -111,7 +111,7 @@ class Worker
         $method = $request['method'] ?? 'GET';
         $uri = $request['uri'] ?? '/';
         $headers = $request['headers'] ?? [];
-        $body = $request['body'] ?? '';
+        $body = self::normalizeIpcBody($request['body'] ?? '');
 
         // Build Laravel request with superglobals emulation
         $_SERVER['REQUEST_METHOD'] = $method;
@@ -123,7 +123,15 @@ class Worker
             $_SERVER[$key] = is_array($values) ? implode(', ', $values) : $values;
         }
 
-        $laravelRequest = Request::create($uri, $method, [], [], [], [], $body);
+        if ($body !== '') {
+            $_SERVER['CONTENT_LENGTH'] = (string) strlen($body);
+            if (!isset($headers['Content-Type']) && !isset($headers['content-type'])) {
+                $_SERVER['CONTENT_TYPE'] = 'application/x-www-form-urlencoded';
+                $_SERVER['HTTP_CONTENT_TYPE'] = 'application/x-www-form-urlencoded';
+            }
+        }
+
+        $laravelRequest = Request::create($uri, $method, [], [], [], $_SERVER, $body);
 
         // Handle the request through the kernel
         $symfonyResponse = $this->kernel->handle($laravelRequest);
@@ -143,6 +151,32 @@ class Worker
             'body' => $responseBody,
             'terminated' => false,
         ];
+    }
+
+    /**
+     * Rust IPC encodes request bodies as JSON byte arrays; PHP may also send UTF-8 strings.
+     */
+    private static function normalizeIpcBody(mixed $body): string
+    {
+        if ($body === null || $body === '') {
+            return '';
+        }
+        if (is_string($body)) {
+            return $body;
+        }
+        if (is_array($body)) {
+            $bytes = '';
+            foreach ($body as $byte) {
+                if (!is_int($byte) && !is_numeric($byte)) {
+                    continue;
+                }
+                $bytes .= chr((int) $byte);
+            }
+
+            return $bytes;
+        }
+
+        return (string) $body;
     }
 
     /**

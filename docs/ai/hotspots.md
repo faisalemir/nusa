@@ -66,5 +66,6 @@ Read **only** these paths for the listed task. Line numbers drift; grep for symb
 
 | Artifact | Path |
 |----------|------|
-| Octane worker | `php-driver/bin/octane-rust-worker` |
-| Composer package | `php-driver/composer.json` |
+| Octane worker binary | `php-driver/bin/nusa-octane-worker` |
+| Service provider | `php-driver/src/NusaOctaneServiceProvider.php` |
+| Composer package (`nusa/octane`) | `php-driver/composer.json` |

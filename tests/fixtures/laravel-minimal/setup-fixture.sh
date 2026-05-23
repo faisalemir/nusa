@@ -27,5 +27,5 @@ fi
 COMPOSER_ALLOW_SUPERUSER=1 "$PHP" "$(command -v composer)" install --no-interaction --prefer-dist
 
 test -f vendor/autoload.php
-test -f php-driver/bin/octane-rust-worker
+test -f php-driver/bin/nusa-octane-worker
 echo "Laravel fixture ready at $ROOT"

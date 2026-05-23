@@ -1,4 +1,4 @@
-//! Worker pool manager for Octane mode.
+﻿//! Worker pool manager for Octane mode.
 //!
 //! Skills applied:
 //! - `m07-concurrency`: mpsc channels over shared state, JoinSet for lifecycle
@@ -207,7 +207,7 @@ impl Worker {
             });
         tokio::fs::create_dir_all(&socket_dir).await?;
         let socket_path = socket_dir.join(format!("worker-{}.sock", id));
-        let worker_script = app_root.join("php-driver/bin/octane-rust-worker");
+        let worker_script = app_root.join("php-driver/bin/nusa-octane-worker");
 
         if !worker_script.exists() {
             return Err(WorkerError::Handshake(format!(

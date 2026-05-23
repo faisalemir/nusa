@@ -67,6 +67,20 @@ impl BlueGreenDeployer {
         }
     }
 
+    /// Mark the standby slot healthy after smoke checks (CLI deploy path).
+    pub fn mark_standby_healthy(&self) {
+        let standby = self.standby.load();
+        if let Some(slot) = standby.as_ref() {
+            let updated = DeploymentSlot {
+                name: slot.name.clone(),
+                router: slot.router.clone(),
+                healthy: true,
+            };
+            self.standby.store(Arc::new(Some(updated)));
+            info!("Standby slot {} marked healthy", slot.name);
+        }
+    }
+
     /// Atomically switch from active to standby (m03-mutability: ArcSwap atomic).
     /// m15-anti-pattern: Zero request drops — swap is atomic, in-flight requests complete on old router.
     pub fn switch(&self) {
@@ -150,4 +164,21 @@ impl BlueGreenDeployer {
     pub fn standby(&self) -> arc_swap::Guard<Arc<Option<DeploymentSlot>>> {
         self.standby.load()
     }
+}
+
+/// Serve HTTP through the active deployment slot (atomic router swap).
+pub fn serving_router(deployer: Arc<BlueGreenDeployer>) -> Router {
+    use axum::body::Body;
+    use axum::http::Request;
+    use tower::util::ServiceExt;
+
+    Router::new().fallback(axum::routing::any_service(tower::service_fn(
+        move |req: Request<Body>| {
+            let deployer = deployer.clone();
+            async move {
+                let router = (*deployer.router()).clone();
+                router.oneshot(req).await
+            }
+        },
+    )))
 }

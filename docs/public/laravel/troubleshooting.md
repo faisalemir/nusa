@@ -9,7 +9,7 @@ Symptoms → likely cause → what to do.
 | Message / symptom | Cause | Fix |
 |-------------------|-------|-----|
 | `octane_workers=... failed to initialize` | PHP binary or driver missing | Install [PHP driver](php-driver.md); check `PATH` in container |
-| `no worker has IPC transport` | Workers did not handshake | Run `composer install`; verify `octane-rust-worker` exists under `code_dir` |
+| `no worker has IPC transport` | Workers did not handshake | Run `composer install`; verify `nusa-octane-worker` exists under `code_dir` |
 | `engine=wasm` rejected | WASM not for Laravel | Use `engine = "child"` |
 | Landlock apply error | Invalid `code_dir` / `tmp_dir` | Paths must exist; use absolute paths in containers |
 

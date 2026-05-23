@@ -36,6 +36,18 @@ Everything else supports those decisions.
 | `octane_workers` | usize | `0` | `0` = Normal only; `> 0` = size of persistent worker pool |
 | `octane_max_memory_mb` | u64 | `512` | Recycle worker after resident memory threshold |
 | `octane_max_requests` | u64 | `1000` | Recycle worker after request count (leak containment) |
+| `bind` | string | `0.0.0.0:8080` | HTTP listen address |
+| `static_root` | string | *(empty)* | Static files root; empty → `{code_dir}/public` |
+
+### Experimental (default off)
+
+| Section / key | Purpose |
+|---------------|---------|
+| `[tls] enabled` | ACME/TLS service spawn (experimental; use reverse proxy for production) |
+| `[tls] acme_email` | Contact email when TLS is enabled |
+| `[redis] broadcast_url` | Redis pub/sub bridge for WS/SSE fan-out; empty = disabled |
+| `[quic] enabled` | Spawns experimental UDP QUIC accept loop (self-signed TLS; HTTP/3 not production-ready) |
+| `[quic] bind` | QUIC listen address (default `0.0.0.0:443`) |
 
 ---
 
@@ -51,6 +63,8 @@ Prefix: **`NUSA_`**. Figment maps to snake_case struct fields.
 | `NUSA_OCTANE_WORKERS` | `octane_workers` | Enable Octane tier in staging |
 | `NUSA_CODE_DIR` | `code_dir` | Mount Laravel at `/app` |
 | `NUSA_TMP_DIR` | `tmp_dir` | Ephemeral volume for uploads |
+| `NUSA_BIND` | `bind` | Listen on `:8080` in the container |
+| `NUSA_STATIC_ROOT` | `static_root` | Override Laravel `public/` path |
 
 This pattern keeps **12-factor** deployments straightforward: image holds code; ConfigMap/Secret holds runtime policy.
 
@@ -144,7 +158,7 @@ code_dir = "/app"
 vfs_root = "/app/public"
 tmp_dir = "/tmp/nusa"
 hot_reload = true
-octane_workers = 0   # until P1 HTTP dispatch is verified in your environment
+octane_workers = 0   # Normal mode; set > 0 for Octane after driver + staging validation
 ```
 
 ## Example: Octane staging (with eyes open)

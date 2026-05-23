@@ -164,11 +164,11 @@ pub fn build_seccomp_filter() -> anyhow::Result<seccompiler::BpfProgram> {
 /// Block: ptrace, mount, umount2, reboot, kexec, keyctl, bpf, unshare, pivot_root
 #[cfg(target_os = "linux")]
 pub fn apply_seccomp_filter() -> anyhow::Result<()> {
-    tracing::info!("Applying Seccomp-BPF syscall filter");
+    tracing::debug!("Applying Seccomp-BPF syscall filter");
     let bpf_filter = build_seccomp_filter()?;
     seccompiler::apply_filter(&bpf_filter)
         .map_err(|e| anyhow::anyhow!("Failed to apply seccomp filter: {}", e))?;
-    tracing::info!("Seccomp-BPF syscall filter applied successfully");
+    // Do not log after install: post-filter syscalls used by tracing/subscribers may be blocked.
     Ok(())
 }
 
