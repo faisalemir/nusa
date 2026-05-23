@@ -208,7 +208,19 @@ fn property_tenant_registry_isolation() {
     };
     registry_a.register(config.clone());
 
-    // Registry B should not know about tenant from A
     assert!(registry_a.is_enabled(&config.id));
-    assert!(!registry_b.is_enabled(&config.id));
+    // Empty registry B is open mode — allows any tenant id until configured.
+    assert!(registry_b.is_enabled(&config.id));
+
+    registry_b.register(TenantConfig {
+        id: TenantId::new("other-tenant"),
+        vfs_root: "/other".into(),
+        max_memory_mb: 256,
+        max_requests_per_minute: 60,
+        enabled: true,
+    });
+    assert!(
+        !registry_b.is_enabled(&config.id),
+        "closed registry must reject unlisted tenants"
+    );
 }

@@ -10,6 +10,7 @@
 #![allow(missing_docs)]
 #![allow(clippy::large_enum_variant, clippy::box_collection)]
 
+pub mod cookies;
 pub mod error;
 pub mod framing;
 pub mod protocol;

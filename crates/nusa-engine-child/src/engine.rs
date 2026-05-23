@@ -83,7 +83,16 @@ impl PhpEngine for ChildEngine {
                 .collect(),
             query: Default::default(),
             post: Default::default(),
-            cookies: Default::default(),
+            cookies: nusa_ipc::cookies::parse_cookie_header(
+                &ctx.headers()
+                    .iter()
+                    .filter_map(|(k, v)| {
+                        v.to_str()
+                            .ok()
+                            .map(|s| (k.as_str().to_string(), vec![s.to_string()]))
+                    })
+                    .collect(),
+            ),
             files: vec![],
             body: Some(ctx.body().to_vec()),
             server: ctx

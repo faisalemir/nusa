@@ -214,6 +214,7 @@ impl IpcTransport {
     ) -> Result<IpcMessage, IpcError> {
         let id = RequestId::new();
         let trace_context = TraceContext::from_raw_headers(&headers);
+        let cookies = crate::cookies::parse_cookie_header(&headers);
 
         let request = IpcMessage::Request {
             id,
@@ -222,7 +223,7 @@ impl IpcTransport {
             headers,
             query: Default::default(),
             post: Default::default(),
-            cookies: Default::default(),
+            cookies,
             files: vec![],
             body,
             server: Default::default(),

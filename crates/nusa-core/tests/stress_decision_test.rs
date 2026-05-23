@@ -798,7 +798,14 @@ fn tenant_registry_is_enabled_false() {
 
 #[test]
 fn tenant_registry_is_enabled_missing_returns_false() {
-    let registry = TenantRegistry::new();
+    let mut registry = TenantRegistry::new();
+    registry.register(TenantConfig {
+        id: TenantId::new("known"),
+        vfs_root: "/t".into(),
+        max_memory_mb: 256,
+        max_requests_per_minute: 100,
+        enabled: true,
+    });
     let id = TenantId::new("missing-tenant");
     assert!(!registry.is_enabled(&id));
 }

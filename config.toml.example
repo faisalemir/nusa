@@ -37,3 +37,11 @@ broadcast_url = ""
 [quic]
 enabled = false
 bind = "0.0.0.0:443"
+
+# Optional multi-tenant registry (when non-empty, only listed tenants are allowed)
+# [[tenants]]
+# id = "acme"
+# vfs_root = "/var/tenants/acme/public"
+# enabled = true
+# max_memory_mb = 512
+# max_requests_per_minute = 1000

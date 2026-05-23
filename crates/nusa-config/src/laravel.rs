@@ -4,6 +4,14 @@ use std::path::{Path, PathBuf};
 
 use crate::RuntimeConfig;
 
+/// Laravel paths that need RW under Landlock (file session/cache/logs).
+pub fn writable_dirs(code_dir: &Path) -> Vec<PathBuf> {
+    let base = PathBuf::from(code_dir);
+    [base.join("storage"), base.join("bootstrap").join("cache")]
+        .into_iter()
+        .collect()
+}
+
 /// Standard container layout (`WORKDIR /app`).
 pub fn container_defaults() -> RuntimeConfig {
     let mut cfg = crate::builtin_defaults();

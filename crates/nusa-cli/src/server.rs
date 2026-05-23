@@ -6,7 +6,8 @@ use std::time::Duration;
 use axum::Router;
 use nusa_config::{ConfigResolution, EngineKind, RuntimeConfig};
 use nusa_core::{
-    BackpressureGuard, PhpEngine, ResourceGuard, TaskManager, TenantRateLimiter, TenantRegistry,
+    BackpressureGuard, PhpEngine, ResourceGuard, TaskManager, TenantConfig, TenantId,
+    TenantRateLimiter, TenantRegistry,
 };
 use nusa_gateway::acme::{AcmeConfig, AcmeProvider, TlsService};
 use nusa_gateway::bluegreen::{BlueGreenDeployer, serving_router};
@@ -137,7 +138,10 @@ async fn build_components(
     let cfg = nusa_config::get();
 
     let engine = build_engine(&cfg)?;
-    nusa_security::apply_landlock(cfg.code_dir.as_ref(), cfg.tmp_dir.as_ref())?;
+    let extra_rw: Vec<std::path::PathBuf> =
+        nusa_config::laravel::writable_dirs(cfg.code_dir.as_ref());
+    let extra_refs: Vec<&std::path::Path> = extra_rw.iter().map(|p| p.as_path()).collect();
+    nusa_security::apply_landlock_paths(cfg.code_dir.as_ref(), cfg.tmp_dir.as_ref(), &extra_refs)?;
     if std::env::var("NUSA_SKIP_SECCOMP").is_ok() {
         tracing::warn!("NUSA_SKIP_SECCOMP is set — seccomp filter not installed (bench/dev only)");
         nusa_security::verify_seccomp_filter()?;
@@ -154,7 +158,7 @@ async fn build_components(
         request_timeout_ms: cfg.timeout_ms,
         max_concurrent: cfg.max_workers,
     });
-    let tenants = Arc::new(TenantRegistry::new());
+    let tenants = Arc::new(build_tenant_registry(&cfg));
     let tasks = Arc::new(TaskManager::new());
     let rate_limiter = Arc::new(TenantRateLimiter::new(1000, 50));
     let tenant_cb = Arc::new(TenantCircuitBreakers::new(5, Duration::from_secs(30)));
@@ -421,4 +425,24 @@ pub async fn start_server(
         .await?;
 
     Ok(())
+}
+
+fn build_tenant_registry(cfg: &RuntimeConfig) -> TenantRegistry {
+    let mut registry = TenantRegistry::new();
+    for entry in &cfg.tenants {
+        registry.register(TenantConfig {
+            id: TenantId::new(entry.id.clone()),
+            vfs_root: entry.vfs_root.clone(),
+            max_memory_mb: entry.max_memory_mb,
+            max_requests_per_minute: entry.max_requests_per_minute,
+            enabled: entry.enabled,
+        });
+    }
+    if !cfg.tenants.is_empty() {
+        tracing::info!(
+            count = cfg.tenants.len(),
+            "loaded tenant registry from config"
+        );
+    }
+    registry
 }

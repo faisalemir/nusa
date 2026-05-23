@@ -95,6 +95,8 @@ Prefix: **`NUSA_`**. Values override the TOML file and built-in defaults. Use **
 | `NUSA_PHP_BINARY` | `php_binary` | `php` | PHP binary for `engine = "child"` |
 | `NUSA_PHP_BOOTSTRAP` | `php_bootstrap` | *(empty)* | Child IPC bootstrap script path |
 
+Landlock also grants **RW** to `{code_dir}/storage` and `{code_dir}/bootstrap/cache` when those directories exist (file session/cache). Prefer **redis** for multi-replica.
+
 ### Nested variables (`NUSA_<SECTION>__<KEY>`)
 
 | Variable | TOML equivalent |
@@ -130,6 +132,21 @@ environment:
 ```
 
 More detail: [Laravel on Docker](laravel/docker.md), [`docker-compose.laravel.example.yml`](../../docker-compose.laravel.example.yml).
+
+### Multi-tenant registry (`[[tenants]]`)
+
+Optional table in `nusa.toml`. When **empty**, any `X-Tenant-Id` / host subdomain is allowed (rate limits still apply). When **non-empty**, only listed tenant IDs are accepted.
+
+```toml
+[[tenants]]
+id = "acme"
+vfs_root = "/var/tenants/acme/public"
+enabled = true
+max_memory_mb = 512
+max_requests_per_minute = 1000
+```
+
+HTTP `Cookie` headers are parsed into the IPC `cookies` field for Octane workers and child IPC (Laravel `Request::create`).
 
 ---
 

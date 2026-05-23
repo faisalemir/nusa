@@ -46,7 +46,12 @@ impl TenantRegistry {
         self.tenants.get(id)
     }
 
+    /// When the registry is empty, all tenants are allowed (open mode).
+    /// When configured, only listed tenant IDs are allowed and must be `enabled`.
     pub fn is_enabled(&self, id: &TenantId) -> bool {
+        if self.tenants.is_empty() {
+            return true;
+        }
         self.tenants.get(id).is_some_and(|c| c.enabled)
     }
 }

@@ -74,6 +74,37 @@ pub struct RuntimeConfig {
     /// HTTP/3 QUIC listener (experimental).
     #[serde(default)]
     pub quic: QuicSettings,
+    /// Registered tenants (`[[tenants]]` in TOML); empty = open (no registry gate).
+    #[serde(default)]
+    pub tenants: Vec<TenantEntry>,
+}
+
+/// Multi-tenant entry in `nusa.toml` (`[[tenants]]`).
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct TenantEntry {
+    /// Tenant identifier (`X-Tenant-Id` / subdomain).
+    pub id: String,
+    /// Web root for this tenant (Laravel `public/` or equivalent).
+    pub vfs_root: String,
+    /// When false, gateway returns 403 for this tenant.
+    #[serde(default = "default_tenant_enabled")]
+    pub enabled: bool,
+    #[serde(default = "default_tenant_max_memory_mb")]
+    pub max_memory_mb: u64,
+    #[serde(default = "default_tenant_rpm")]
+    pub max_requests_per_minute: u64,
+}
+
+fn default_tenant_enabled() -> bool {
+    true
+}
+
+fn default_tenant_max_memory_mb() -> u64 {
+    512
+}
+
+fn default_tenant_rpm() -> u64 {
+    1000
 }
 
 /// TLS / ACME configuration (experimental; full ACME is post-GA).
@@ -169,6 +200,7 @@ pub(crate) fn builtin_defaults() -> RuntimeConfig {
         tls: TlsSettings::default(),
         redis: RedisSettings::default(),
         quic: QuicSettings::default(),
+        tenants: Vec::new(),
     }
 }
 

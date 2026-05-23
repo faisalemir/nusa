@@ -27,6 +27,15 @@ static LANDLOCK_APPLIED: AtomicBool = AtomicBool::new(false);
 ///
 /// Landlock is process-wide; a second call returns an error instead of stacking rules.
 pub fn apply_landlock(code_dir: &Path, tmp_dir: &Path) -> anyhow::Result<()> {
+    apply_landlock_paths(code_dir, tmp_dir, &[])
+}
+
+/// Apply Landlock with optional extra RW directories (e.g. Laravel `storage/`).
+pub fn apply_landlock_paths(
+    code_dir: &Path,
+    tmp_dir: &Path,
+    extra_rw: &[&Path],
+) -> anyhow::Result<()> {
     #[cfg(target_os = "linux")]
     let _guard = LANDLOCK_GUARD
         .lock()
@@ -37,7 +46,7 @@ pub fn apply_landlock(code_dir: &Path, tmp_dir: &Path) -> anyhow::Result<()> {
             "Landlock rules already applied to this process"
         ));
     }
-    landlock::apply_landlock_rules(code_dir, tmp_dir)?;
+    landlock::apply_landlock_rules(code_dir, tmp_dir, extra_rw)?;
     #[cfg(target_os = "linux")]
     LANDLOCK_APPLIED.store(true, Ordering::Release);
     Ok(())

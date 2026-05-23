@@ -95,8 +95,24 @@ fn tenant_registry_is_enabled_false() {
 }
 
 #[test]
-fn tenant_registry_is_enabled_missing_tenant() {
+fn tenant_registry_open_mode_allows_unknown() {
     let registry = TenantRegistry::new();
+    assert!(
+        registry.is_enabled(&TenantId::new("unknown")),
+        "empty registry is open mode"
+    );
+}
+
+#[test]
+fn tenant_registry_is_enabled_missing_tenant() {
+    let mut registry = TenantRegistry::new();
+    registry.register(TenantConfig {
+        id: TenantId::new("known"),
+        vfs_root: "/tenants/known".into(),
+        max_memory_mb: 256,
+        max_requests_per_minute: 100,
+        enabled: true,
+    });
     assert!(!registry.is_enabled(&TenantId::new("unknown")));
 }
 

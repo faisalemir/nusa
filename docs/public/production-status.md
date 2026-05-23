@@ -79,7 +79,10 @@ The project maintains a **large, categorized test suite**—security, concurrenc
 | G4 | Laravel fixture E2E in Alpine CI | **Addressed** — `tests/fixtures/laravel-minimal`, `nusa-e2e-tests`, `just podman-test-laravel` | — |
 | G5 | Normal Mode latency KPIs and signed release process | `just podman-bench-normal-smoke` + child bootstrap fixture; **FPM baseline table + v1.0.0 tag** still **P3–P4** | **P3–P4** |
 | G5b | Session / middleware Laravel E2E | **Addressed** — fixture routes + pool forwards IPC response headers | — |
-| G6 | Blueprint “Phase 6” advanced features | Post-GA innovation track | **P5** |
+| — | IPC `Cookie` → `cookies` field | **Addressed** — parsed in `nusa-ipc`, Octane transport + child engine | — |
+| — | Landlock RW for Laravel `storage/` | **Addressed** — `apply_landlock_paths` + `laravel::writable_dirs` | — |
+| — | Config-driven tenant registry | **Addressed** — `[[tenants]]`; open mode when empty | — |
+| G6 | Blueprint “Phase 6” advanced features | **Deferred** — tracked in [post-GA blueprint](../contributor/post-ga-blueprint.md), not v0.1 scope | **P5** |
 
 We do not hide these behind optimistic README tables. [Migration](migration.md) and [Operations](operations/runbook.md) repeat the Octane caveat where it affects your runbooks.
 
@@ -92,9 +95,9 @@ We do not hide these behind optimistic README tables. [Migration](migration.md) 
 | **M0** | Philosophy, plugin model, workspace governance | **Strong** — vision documented; core traits in place |
 | **M1** | Normal mode gateway, engines, config hot-reload, telemetry | **Largely complete** — primary path for pilots |
 | **M2** | Octane core, IPC, worker recycle | **Complete in CI** — HTTP dispatch + Laravel live tests in `podman-ci` |
-| **M3** | TLS, QUIC, ACME modules, WASM engine paths | **Partial** — code present; environment-dependent activation |
-| **M4** | Multi-tenant, tasks, plugins | **Partial** — plugin pre/post hooks run in gateway; tenant registry still operator-driven |
-| **M5** | Benchmarks, release matrix, GA | **Partial** — Alpine CI gates green; benchmark tables and tag process open |
+| **M3** | TLS, QUIC, ACME modules, WASM engine paths | **Experimental** — QUIC listener spawns when `quic.enabled`; TLS/ACME partial; WASM CLI stub only |
+| **M4** | Multi-tenant, tasks, plugins | **Largely complete** — `[[tenants]]` in config; plugins pre/post; tasks API; open registry when `tenants` empty |
+| **M5** | Benchmarks, release matrix, GA | **Partial** — Alpine CI gates green; FPM comparison table + signed v1.0.0 tag open (P3–P4) |
 
 ---
 
