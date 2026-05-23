@@ -43,6 +43,10 @@ bind = "0.0.0.0:8080"
 # Static files root (empty = {code_dir}/public)
 static_root = ""
 
+# Child engine (engine = "child")
+php_binary = "php"
+# php_bootstrap = "/path/to/bootstrap/nusa-child-ipc.php"
+
 # --- Experimental (default off) ---
 
 [tls]

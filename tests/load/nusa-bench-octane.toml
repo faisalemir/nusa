@@ -1,0 +1,12 @@
+# P3 Octane route latency — Laravel minimal fixture (Alpine paths)
+engine = "child"
+octane_workers = 1
+max_workers = 8
+timeout_ms = 30000
+hot_reload = false
+bind = "127.0.0.1:18081"
+code_dir = "/src/tests/fixtures/laravel-minimal"
+vfs_root = "/src/tests/fixtures/laravel-minimal/public"
+static_root = "/src/tests/fixtures/laravel-minimal/public"
+tmp_dir = "/tmp/nusa-bench"
+php_binary = "php"

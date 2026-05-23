@@ -289,8 +289,16 @@ async fn handler(State(state): State<AppState>, req: Request<Body>) -> Response<
         }
     };
 
+    let method_str = method.to_string();
+    let uri_str = uri
+        .path_and_query()
+        .map(|p| p.as_str())
+        .unwrap_or_else(|| uri.path())
+        .to_string();
+
     // Build request context
-    let ctx = match build_request_context(req, &state.resource_guard).await {
+    let ctx = match build_request_context(req, &method_str, &uri_str, &state.resource_guard).await
+    {
         Ok(ctx) => ctx,
         Err(status) => {
             state.metrics.requests_failed_total.increment(1);
@@ -336,13 +344,6 @@ async fn handler(State(state): State<AppState>, req: Request<Body>) -> Response<
     }
 
     let ctx_post = ctx.clone();
-
-    let method_str = method.to_string();
-    let uri_str = uri
-        .path_and_query()
-        .map(|p| p.as_str())
-        .unwrap_or_else(|| uri.path())
-        .to_string();
 
     let octane_mode = {
         let guard = state.octane_pool.lock().await;
@@ -463,6 +464,8 @@ fn http_headers_to_ipc(headers: &http::HeaderMap) -> HashMap<String, Vec<String>
 /// Build RequestContext from HTTP request.
 async fn build_request_context(
     req: Request<Body>,
+    method: &str,
+    uri: &str,
     guard: &ResourceGuard,
 ) -> Result<RequestContext, StatusCode> {
     let content_length = req
@@ -475,7 +478,19 @@ async fn build_request_context(
         return Err(StatusCode::PAYLOAD_TOO_LARGE);
     }
 
-    let headers = req.headers().clone();
+    let mut headers = req.headers().clone();
+    if let (Ok(name), Ok(value)) = (
+        http::HeaderName::from_bytes(b"x-request-method"),
+        http::HeaderValue::from_str(method),
+    ) {
+        headers.insert(name, value);
+    }
+    if let (Ok(name), Ok(value)) = (
+        http::HeaderName::from_bytes(b"x-request-uri"),
+        http::HeaderValue::from_str(uri),
+    ) {
+        headers.insert(name, value);
+    }
     let tenant = middleware::extract_tenant(&headers);
 
     let body_bytes = axum::body::to_bytes(req.into_body(), guard.max_request_bytes)

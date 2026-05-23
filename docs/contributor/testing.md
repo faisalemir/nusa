@@ -9,7 +9,7 @@ Nusa uses **cargo-nextest** via the [`justfile`](../../justfile).
 | `just podman-build` | Dockerfile / `Cargo.lock` / Laravel deps changed | Build `nusa-test-runner` image (**not** every CI run) |
 | **`just podman-ci-fast`** | Daily / Rust-only loop | fmt-check + Alpine clippy + workspace tests |
 | **`just podman-ci`** | **Pre-merge** | fast tier + Laravel E2E smoke (`nusa-e2e-tests`) |
-| **`just podman-ci-e2e`** | Pre-GA / nightly | workspace + E2E + leak 10k + IPC bench (leak-only filter; no duplicate full E2E) |
+| **`just podman-ci-e2e`** | Pre-GA / nightly | workspace + E2E + leak 10k + IPC bench + normal wrk smoke |
 | `just podman-ci-rebuild` | After image inputs change | `podman-build` then `podman-ci` |
 
 Host commands (`just test`, `just test-fast`, `just ci`) are for **local iteration only**.
@@ -87,7 +87,7 @@ Full registry: `.cursor/skills/rust-test/SKILL.md` → **Nusa Test Sector Regist
 | Gap | Owner / gate | Notes |
 |-----|--------------|-------|
 | S15 session/middleware E2E | **Addressed** | `laravel_session_cookie_round_trip_via_ipc_headers`, `laravel_custom_middleware_runs_on_worker_path` in `laravel_live.rs` |
-| `just podman-ci-e2e` green log | Release sign-off | Leak 10k + IPC bench must pass once on release hardware |
+| `just podman-ci-e2e` green log | Release sign-off | Leak 10k + IPC bench + `podman-bench-normal-smoke` on release hardware |
 | S16 `nusa-engine-ffi` | Manual | Excluded from default Podman workspace run |
 | S17 `nusa-cli` full suite | `podman-test-pkg cli` | Excluded from default Podman workspace run |
 

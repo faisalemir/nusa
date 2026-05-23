@@ -56,6 +56,12 @@ pub struct RuntimeConfig {
     /// Static file document root; when empty, uses `{code_dir}/public`.
     #[serde(default)]
     pub static_root: String,
+    /// PHP binary for `engine = "child"` (e.g. `php` or `php84` on Alpine).
+    #[serde(default = "default_php_binary")]
+    pub php_binary: String,
+    /// Child-engine IPC bootstrap script; empty uses `index.php` in the process working directory.
+    #[serde(default)]
+    pub php_bootstrap: String,
     /// TLS / ACME settings (experimental).
     #[serde(default)]
     pub tls: TlsSettings,
@@ -110,6 +116,10 @@ fn default_bind() -> String {
     "0.0.0.0:8080".into()
 }
 
+fn default_php_binary() -> String {
+    "php".into()
+}
+
 /// Resolved static file root (explicit `static_root` or Laravel `public/` under `code_dir`).
 pub fn effective_static_root(cfg: &RuntimeConfig) -> String {
     if !cfg.static_root.is_empty() {
@@ -146,6 +156,8 @@ fn default_config() -> RuntimeConfig {
         octane_max_requests: 1000,
         bind: default_bind(),
         static_root: String::new(),
+        php_binary: default_php_binary(),
+        php_bootstrap: String::new(),
         tls: TlsSettings::default(),
         redis: RedisSettings::default(),
         quic: QuicSettings::default(),

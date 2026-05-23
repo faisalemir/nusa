@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- P3: `php_bootstrap` / `php_binary` config, `php-static-minimal` fixture, `just podman-bench-normal-smoke`
+- Gateway forwards `X-Request-Method` / `X-Request-Uri` to child engine
 - CLI `nusa --version` and `just version` / `just release-bump` / `just sync-composer-version` for SemVer workflow
 - `version` field in `php-driver/composer.json` aligned with workspace package version
 

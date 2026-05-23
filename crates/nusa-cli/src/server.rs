@@ -63,7 +63,19 @@ pub fn build_engine(cfg: &RuntimeConfig) -> anyhow::Result<Arc<dyn PhpEngine>> {
             }
             Arc::new(nusa_engine_wasm::WasmEngine::stub())
         }
-        EngineKind::Child => Arc::new(nusa_engine_child::ChildEngine::with_default_php()),
+        EngineKind::Child => {
+            let php_binary = std::path::PathBuf::from(if cfg.php_binary.is_empty() {
+                "php"
+            } else {
+                cfg.php_binary.as_str()
+            });
+            let bootstrap = if cfg.php_bootstrap.is_empty() {
+                std::path::PathBuf::from("index.php")
+            } else {
+                std::path::PathBuf::from(cfg.php_bootstrap.as_str())
+            };
+            Arc::new(nusa_engine_child::ChildEngine::new(php_binary, bootstrap))
+        }
     };
     Ok(engine)
 }
@@ -126,7 +138,14 @@ async fn build_components(
 
     let engine = build_engine(&cfg)?;
     nusa_security::apply_landlock(cfg.code_dir.as_ref(), cfg.tmp_dir.as_ref())?;
-    nusa_security::apply_seccomp()?;
+    if std::env::var("NUSA_SKIP_SECCOMP").is_ok() {
+        tracing::warn!(
+            "NUSA_SKIP_SECCOMP is set — seccomp filter not installed (bench/dev only)"
+        );
+        nusa_security::verify_seccomp_filter()?;
+    } else {
+        nusa_security::apply_seccomp()?;
+    }
 
     let plugins = Arc::new(PluginRegistry::new());
     let circuit_breaker = Arc::new(CircuitBreaker::new(5, Duration::from_secs(30)));

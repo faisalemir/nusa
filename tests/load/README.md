@@ -36,13 +36,15 @@ k6 run -e K6_BASE=http://127.0.0.1:8080 tests/load/laravel-fixture.js
 
 ## Alpine note
 
-The test image does not include wrk/k6 by default. Install in a one-off container or on the benchmark host:
+The test image includes `wrk` after `just podman-build` (Dockerfile). On an older image without wrk, install on the benchmark host:
 
 ```bash
 apk add wrk   # Alpine
 ```
 
 CI proof for correctness remains `just podman-ci` / `just podman-ci-e2e`; load tests are **P3 evidence** for GA tables.
+
+`just podman-bench-normal-smoke` sets `NUSA_SKIP_SECCOMP=1` by default (landlock still on). For production-like runs on bare Alpine, unset it and use `NUSA_BENCH_RELEASE=1`.
 
 ## Sign-off
 

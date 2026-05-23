@@ -189,6 +189,10 @@ podman-test-laravel-leak-dev:
 podman-bench-ipc-smoke:
     podman run --rm -t {{podman-run-mount}} nusa-test-runner sh -c "{{podman-cargo-sh}} cargo bench -p nusa-benchmarks --bench ipc_latency_bench -- --noplot"
 
+# P3: short wrk smoke (child + Octane); writes docs/benchmarks/artifacts/normal-smoke-*.md
+podman-bench-normal-smoke:
+    podman run --rm -t {{podman-run-mount}} nusa-test-runner sh -c "{{podman-cargo-sh}} sh tests/load/run-alpine-bench-smoke.sh"
+
 # Pre-merge (typical): no image rebuild; ~5–15 min depending on changed crates
 podman-ci-fast: fmt-check podman-require-image podman-lint podman-test-workspace
 
@@ -196,10 +200,13 @@ podman-ci-fast: fmt-check podman-require-image podman-lint podman-test-workspace
 podman-ci: fmt-check podman-require-image podman-lint podman-test-live
 
 # Pre-GA / nightly: workspace + E2E + leak 10k + IPC bench (no duplicate full e2e pass)
-podman-ci-e2e: fmt-check podman-require-image podman-lint podman-test-workspace podman-test-e2e podman-test-laravel-leak podman-bench-ipc-smoke
+podman-ci-e2e: fmt-check podman-require-image podman-lint podman-test-workspace podman-test-e2e podman-test-laravel-leak podman-bench-ipc-smoke podman-bench-normal-smoke
 
 # Rebuild image then run pre-merge gate (Dockerfile / Cargo.lock / fixture deps changed)
 podman-ci-rebuild: podman-build podman-ci
+
+# Rebuild image then pre-GA gate (adds wrk to image when Dockerfile changed)
+podman-ci-e2e-rebuild: podman-build podman-ci-e2e
 
 # Rebuild image from scratch (clears image layers)
 podman-clean:

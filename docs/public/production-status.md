@@ -77,7 +77,7 @@ The project maintains a **large, categorized test suite**—security, concurrenc
 | G2 | `/ready` when Octane pool required but unhealthy | **Addressed** — `/ready` checks `pool.is_ready()` | — |
 | G3 | CLI startup when `octane_workers > 0` | **Addressed** — process exits if init or ready fails | — |
 | G4 | Laravel fixture E2E in Alpine CI | **Addressed** — `tests/fixtures/laravel-minimal`, `nusa-e2e-tests`, `just podman-test-laravel` | — |
-| G5 | Normal Mode latency KPIs and signed release process | Load scripts in `tests/load/`; release checklist + fixed SBOM workflow; **wrk/k6 numbers + tag** still **P3–P4** | **P3–P4** |
+| G5 | Normal Mode latency KPIs and signed release process | `just podman-bench-normal-smoke` + child bootstrap fixture; **FPM baseline table + v1.0.0 tag** still **P3–P4** | **P3–P4** |
 | G5b | Session / middleware Laravel E2E | **Addressed** — fixture routes + pool forwards IPC response headers | — |
 | G6 | Blueprint “Phase 6” advanced features | Post-GA innovation track | **P5** |
 

@@ -44,7 +44,7 @@ COPY . .
 RUN apk add --no-cache \
         php84 php84-phar php84-mbstring php84-xml php84-curl php84-openssl \
         php84-tokenizer php84-fileinfo php84-session php84-dom php84-pdo php84-pdo_sqlite \
-        php84-sqlite3 composer \
+        php84-sqlite3 composer curl wrk \
     && ln -sf /usr/bin/php84 /usr/bin/php \
     && cd /src/tests/fixtures/laravel-minimal \
     && ln -sfn /src/php-driver ./php-driver \

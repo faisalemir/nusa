@@ -9,6 +9,7 @@ Performance evidence for Nusa GA (M1 Normal Mode, M2 IPC). All release numbers m
 | Full suite | `just bench` |
 | IPC latency (P2 KPI) | `just bench-fast ipc_latency_bench` |
 | Alpine IPC smoke | `just podman-bench-ipc-smoke` |
+| Alpine Normal wrk smoke (P3) | `just podman-bench-normal-smoke` |
 
 **P2 target:** IPC round-trip P99 ≤ 10 ms (`ipc_latency_bench`, release profile).
 

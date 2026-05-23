@@ -1,6 +1,6 @@
 # Normal Mode benchmark report (M1 pilot)
 
-**Status:** Pilot methodology documented — wrk/k6 numbers still **TBD** before GA tag.  
+**Status:** Alpine wrk smoke automated (`just podman-bench-normal-smoke`) — **FPM comparison on release hardware** still **TBD** before GA tag.  
 **Environment:** Alpine Linux musl (`just podman-ci`), `engine = child`, `octane_workers = 0`.  
 **CI (2026-05-23):** `just podman-ci-fast` / `just podman-ci` green on working tree; soak tests in workspace (e.g. `gateway_soak_30_seconds_memory_stable`) pass in Alpine.
 
@@ -31,19 +31,23 @@ Scripts: [`tests/load/README.md`](../../tests/load/README.md).
 
 ### Results (fill on Alpine)
 
+Smoke summaries are written to [`artifacts/normal-smoke-YYYY-MM-DD.md`](artifacts/) by `just podman-bench-normal-smoke`. Copy the best run into this table before GA.
+
 | Scenario | Engine | P50 (ms) | P99 (ms) | RPS |
 |----------|--------|----------|----------|-----|
 | S1 | FPM | _TBD_ | _TBD_ | _TBD_ |
-| S1 | Nusa child | _TBD_ | _TBD_ | _TBD_ |
-| S2 | Nusa child | _TBD_ | _TBD_ | _TBD_ |
+| S1 | Nusa child (`php-static-minimal`) | _see smoke artifact_ | _see smoke artifact_ | _see smoke artifact_ |
+| S2 | Nusa Octane (`/nusa-ping`) | _see smoke artifact_ | _see smoke artifact_ | _see smoke artifact_ |
 
 ## Child engine E2E
 
-Integration coverage: `tests/integration/engine_integration_test.rs` (mock engine lifecycle).  
-Live PHP child paths are validated in Alpine via gateway + config tests; extend with `public/index.php` fixture when added.
+- Fixture: `tests/fixtures/php-static-minimal/` with `bootstrap/nusa-child-ipc.php`
+- Config: `php_bootstrap` in `nusa.toml` (see `tests/load/nusa-bench-child.toml`)
+- Test: `nusa-engine-child` `child_bootstrap_fixture_test` (requires `php` on PATH)
 
 ## Sign-off
 
 - [x] Alpine musl workspace + gateway soak tests (`just podman-ci-fast`)  
-- [ ] wrk/k6 P50/P99 compared against FPM on same host  
+- [x] Alpine wrk smoke (`just podman-bench-normal-smoke`)  
+- [ ] wrk/k6 P50/P99 compared against FPM on same host (GA)  
 - [x] Linked from [`docs/public/production-status.md`](../public/production-status.md)

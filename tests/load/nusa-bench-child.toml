@@ -1,0 +1,14 @@
+# P3 Normal mode (child engine) — php-static-minimal fixture (Alpine paths)
+engine = "child"
+octane_workers = 0
+max_workers = 8
+timeout_ms = 30000
+hot_reload = false
+bind = "127.0.0.1:18080"
+# Paths are absolute for Podman (/src mount)
+code_dir = "/src/tests/fixtures/php-static-minimal"
+vfs_root = "/src/tests/fixtures/php-static-minimal/public"
+static_root = "/src/tests/fixtures/php-static-minimal/public"
+tmp_dir = "/tmp/nusa-bench"
+php_binary = "php"
+php_bootstrap = "/src/tests/fixtures/php-static-minimal/bootstrap/nusa-child-ipc.php"

@@ -34,7 +34,7 @@ Without `cargo-edit`, bump `version` in `Cargo.toml` manually, then `just sync-c
 |------|---------|---------------|
 | 1 | `just podman-build` | Only if Dockerfile, `Cargo.lock`, or fixture deps changed |
 | 2 | `just podman-ci` | fmt + lint + 1620 workspace + Laravel E2E 14/14 |
-| 3 | `just podman-ci-e2e` | + leak 10k + `ipc_latency_bench` smoke |
+| 3 | `just podman-ci-e2e` | + leak 10k + IPC bench + `podman-bench-normal-smoke` |
 | 4 | `just security` | audit + geiger + deny (host; review Alpine separately) |
 
 Archive CI log URLs or local transcripts in the release issue.

@@ -119,7 +119,7 @@ Full reference: [Configuration](docs/public/configuration.md) · Laravel-focused
 - Per-tenant rate limits and circuit breakers (platform apps)
 - Alpine CI validation (`just podman-ci`)
 
-**Before GA:** published benchmark numbers, your staging sign-off on Alpine, optional session/middleware E2E depth. See [production status](docs/public/production-status.md).
+**Before GA:** FPM comparison benchmarks on release hardware, your staging sign-off on Alpine (`just podman-ci-e2e`). See [production status](docs/public/production-status.md).
 
 ---
 
