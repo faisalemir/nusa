@@ -103,13 +103,11 @@ fn run_init(octane: bool, output: &str, force: bool) -> anyhow::Result<()> {
     let workers = if octane { 4 } else { 0 };
     let contents = nusa_config::laravel::render_starter_toml(&root, workers);
     std::fs::write(out, contents)?;
-    println!(
-        "Wrote {} (code_dir={})",
-        out.display(),
-        root.display()
-    );
+    println!("Wrote {} (code_dir={})", out.display(), root.display());
     println!("Start: nusa --config {}", out.display());
-    println!("Or container-only: set NUSA_CODE_DIR and NUSA_OCTANE_WORKERS (see docs/public/laravel/docker.md)");
+    println!(
+        "Or container-only: set NUSA_CODE_DIR and NUSA_OCTANE_WORKERS (see docs/public/laravel/docker.md)"
+    );
     Ok(())
 }
 

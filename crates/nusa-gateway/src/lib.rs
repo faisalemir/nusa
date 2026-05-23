@@ -297,8 +297,7 @@ async fn handler(State(state): State<AppState>, req: Request<Body>) -> Response<
         .to_string();
 
     // Build request context
-    let ctx = match build_request_context(req, &method_str, &uri_str, &state.resource_guard).await
-    {
+    let ctx = match build_request_context(req, &method_str, &uri_str, &state.resource_guard).await {
         Ok(ctx) => ctx,
         Err(status) => {
             state.metrics.requests_failed_total.increment(1);

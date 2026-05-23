@@ -16,7 +16,9 @@ fn fixture_bootstrap() -> PathBuf {
 #[tokio::test]
 async fn child_fixture_bootstrap_returns_static_body_for_root() {
     if Command::new("php").arg("--version").output().is_err() {
-        eprintln!("STUB_CONTRACT: php not on PATH; run in Alpine podman-ci for child bootstrap coverage");
+        eprintln!(
+            "STUB_CONTRACT: php not on PATH; run in Alpine podman-ci for child bootstrap coverage"
+        );
         return;
     }
 
@@ -39,13 +41,9 @@ async fn child_fixture_bootstrap_returns_static_body_for_root() {
         http::HeaderValue::from_static("/"),
     );
 
-    let ctx = RequestContext::new(
-        "/fixture".into(),
-        "index.php".into(),
-        deadline,
-    )
-    .with_headers(headers)
-    .with_env(Arc::new(std::collections::HashMap::new()));
+    let ctx = RequestContext::new("/fixture".into(), "index.php".into(), deadline)
+        .with_headers(headers)
+        .with_env(Arc::new(std::collections::HashMap::new()));
 
     let response = engine
         .execute(ctx)

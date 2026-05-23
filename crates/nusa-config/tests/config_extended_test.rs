@@ -6,6 +6,8 @@ use std::fs;
 use std::sync::Mutex;
 use std::time::Duration;
 
+use serial_test::serial;
+
 static CONFIG_LOCK: Mutex<()> = Mutex::new(());
 
 fn write_temp_config(content: &str) -> String {
@@ -27,10 +29,11 @@ fn cleanup(path: &str) {
 // ── Hot-Reload: File Modification ──
 
 #[tokio::test]
+#[serial]
 async fn config_hot_reload_detects_file_change() {
-    let _lock = CONFIG_LOCK.lock().expect("config lock must succeed");
-
-    let content = r#"
+    let path = {
+        let _lock = CONFIG_LOCK.lock().expect("config lock must succeed");
+        let content = r#"
         engine = "child"
         max_workers = 4
         timeout_ms = 30000
@@ -40,10 +43,11 @@ async fn config_hot_reload_detects_file_change() {
         tmp_dir = "/tmp"
         hot_reload = true
     "#;
-    let path = write_temp_config(content);
-    let _ = nusa_config::load(&path);
-
-    assert_eq!(nusa_config::get().max_workers, 4);
+        let path = write_temp_config(content);
+        let _ = nusa_config::load(&path);
+        assert_eq!(nusa_config::get().max_workers, 4);
+        path
+    };
 
     let handle = nusa_config::watch(path.clone());
 
@@ -74,10 +78,11 @@ async fn config_hot_reload_detects_file_change() {
 // ── Hot-Reload: File Deleted ──
 
 #[tokio::test]
+#[serial]
 async fn config_watch_handles_deleted_file() {
-    let _lock = CONFIG_LOCK.lock().expect("config lock must succeed");
-
-    let content = r#"
+    let path = {
+        let _lock = CONFIG_LOCK.lock().expect("config lock must succeed");
+        let content = r#"
         engine = "child"
         max_workers = 4
         timeout_ms = 30000
@@ -87,8 +92,10 @@ async fn config_watch_handles_deleted_file() {
         tmp_dir = "/tmp"
         hot_reload = true
     "#;
-    let path = write_temp_config(content);
-    let _ = nusa_config::load(&path);
+        let path = write_temp_config(content);
+        let _ = nusa_config::load(&path);
+        path
+    };
 
     let handle = nusa_config::watch(path.clone());
 
@@ -104,14 +111,14 @@ async fn config_watch_handles_deleted_file() {
 // ── Hot-Reload: Invalid TOML Written ──
 
 #[tokio::test]
+#[serial]
 async fn config_watch_handles_invalid_toml_gracefully() {
-    let _lock = CONFIG_LOCK.lock().expect("config lock must succeed");
-
-    unsafe {
-        std::env::remove_var("NUSA_MAX_WORKERS");
-    }
-
-    let content = r#"
+    let (path, workers_before) = {
+        let _lock = CONFIG_LOCK.lock().expect("config lock must succeed");
+        unsafe {
+            std::env::remove_var("NUSA_MAX_WORKERS");
+        }
+        let content = r#"
         engine = "child"
         max_workers = 4
         timeout_ms = 30000
@@ -121,11 +128,11 @@ async fn config_watch_handles_invalid_toml_gracefully() {
         tmp_dir = "/tmp"
         hot_reload = true
     "#;
-    let path = write_temp_config(content);
-    let _ = nusa_config::load(&path);
-    assert_eq!(nusa_config::get().max_workers, 4);
-
-    let workers_before = nusa_config::get().max_workers;
+        let path = write_temp_config(content);
+        let _ = nusa_config::load(&path);
+        assert_eq!(nusa_config::get().max_workers, 4);
+        (path, nusa_config::get().max_workers)
+    };
 
     let handle = nusa_config::watch(path.clone());
 
@@ -145,10 +152,11 @@ async fn config_watch_handles_invalid_toml_gracefully() {
 // ── Hot-Reload: File Recreated ──
 
 #[tokio::test]
+#[serial]
 async fn config_watch_handles_file_recreated() {
-    let _lock = CONFIG_LOCK.lock().expect("config lock must succeed");
-
-    let content = r#"
+    let path = {
+        let _lock = CONFIG_LOCK.lock().expect("config lock must succeed");
+        let content = r#"
         engine = "child"
         max_workers = 4
         timeout_ms = 30000
@@ -158,8 +166,10 @@ async fn config_watch_handles_file_recreated() {
         tmp_dir = "/tmp"
         hot_reload = true
     "#;
-    let path = write_temp_config(content);
-    let _ = nusa_config::load(&path);
+        let path = write_temp_config(content);
+        let _ = nusa_config::load(&path);
+        path
+    };
 
     let handle = nusa_config::watch(path.clone());
 
@@ -189,6 +199,7 @@ async fn config_watch_handles_file_recreated() {
 // ── Config Update Consistency ──
 
 #[test]
+#[serial]
 fn config_update_preserves_unrelated_fields() {
     let _lock = CONFIG_LOCK.lock().expect("config lock must succeed");
 

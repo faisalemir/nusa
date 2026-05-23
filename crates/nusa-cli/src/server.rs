@@ -139,9 +139,7 @@ async fn build_components(
     let engine = build_engine(&cfg)?;
     nusa_security::apply_landlock(cfg.code_dir.as_ref(), cfg.tmp_dir.as_ref())?;
     if std::env::var("NUSA_SKIP_SECCOMP").is_ok() {
-        tracing::warn!(
-            "NUSA_SKIP_SECCOMP is set — seccomp filter not installed (bench/dev only)"
-        );
+        tracing::warn!("NUSA_SKIP_SECCOMP is set — seccomp filter not installed (bench/dev only)");
         nusa_security::verify_seccomp_filter()?;
     } else {
         nusa_security::apply_seccomp()?;

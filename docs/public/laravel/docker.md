@@ -93,5 +93,6 @@ nusa init --octane     # Octane starter (4 workers)
 ## Next steps
 
 - [Installation](installation.md)
+- [Configuration reference](../configuration.md) (full `NUSA_*` table)
 - [Configuration for Laravel](configuration-for-laravel.md)
 - [Octane mode](octane-mode.md)

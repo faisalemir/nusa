@@ -2,10 +2,11 @@
 
 Nusa is operated through a **small, explicit configuration surface**—`nusa.toml` plus environment overrides—because platform teams should not reverse-engineer PHP ini files to understand concurrency, sandbox paths, or worker topology.
 
-Configuration loads through **figment**: defaults → TOML file → `NUSA_*` environment variables. Hot reload swaps the active config with **`ArcSwap`** when `hot_reload = true`, so you can change limits without rebuilding images.
+Configuration loads through **figment**: **built-in defaults → TOML file (if present) → `NUSA_*` environment variables** (`NUSA_*` wins on conflict). Hot reload swaps the active config with **`ArcSwap`** when `hot_reload = true`; invalid TOML on reload is rejected and the last good snapshot is kept.
 
 Implementation source: [`crates/nusa-config/src/lib.rs`](../../crates/nusa-config/src/lib.rs).  
-Example file: [`config.toml.example`](../../config.toml.example).
+Example file: [`config.toml.example`](../../config.toml.example).  
+Laravel containers (env-only, no `nusa.toml`): [Laravel on Docker](laravel/docker.md).
 
 ---
 
@@ -29,10 +30,12 @@ Everything else supports those decisions.
 | `max_workers` | usize | `4` | Gateway concurrency and backpressure ceiling (**must be > 0**) |
 | `timeout_ms` | u64 | `30000` | Per-request upstream timeout in milliseconds |
 | `wasm_memory_mb` | u64 | `256` | WASM store limit when `engine = "wasm"` |
-| `vfs_root` | string | `/app/public` | Virtual filesystem root for script resolution |
-| `code_dir` | string | `/app/public` | Laravel root; **Landlock read/code rules** |
+| `vfs_root` | string | *(empty)* | Web root; empty → `{code_dir}/public` after path normalization |
+| `code_dir` | string | `/app` | Laravel root (`artisan`); **Landlock read/code rules** — not `public/` alone |
 | `tmp_dir` | string | `/tmp/nusa` | Writable enclave; **Landlock write rules** |
 | `hot_reload` | bool | `true` | Watch config file and atomically swap in-process |
+| `php_binary` | string | `php` | PHP executable when `engine = "child"` |
+| `php_bootstrap` | string | *(empty)* | Child IPC bootstrap script; empty uses default bootstrap |
 | `octane_workers` | usize | `0` | `0` = Normal only; `> 0` = size of persistent worker pool |
 | `octane_max_memory_mb` | u64 | `512` | Recycle worker after resident memory threshold |
 | `octane_max_requests` | u64 | `1000` | Recycle worker after request count (leak containment) |
@@ -51,22 +54,82 @@ Everything else supports those decisions.
 
 ---
 
-## Environment variables
+## How the config file is found
 
-Prefix: **`NUSA_`**. Figment maps to snake_case struct fields.
+Resolution order (first match wins):
 
-| Variable | Field | Example use |
-|----------|-------|-------------|
-| `NUSA_ENGINE` | `engine` | `child` in K8s manifest |
-| `NUSA_MAX_WORKERS` | `max_workers` | Scale concurrency per deployment |
-| `NUSA_TIMEOUT_MS` | `timeout_ms` | Tighten API route budget |
-| `NUSA_OCTANE_WORKERS` | `octane_workers` | Enable Octane tier in staging |
-| `NUSA_CODE_DIR` | `code_dir` | Mount Laravel at `/app` |
-| `NUSA_TMP_DIR` | `tmp_dir` | Ephemeral volume for uploads |
-| `NUSA_BIND` | `bind` | Listen on `:8080` in the container |
-| `NUSA_STATIC_ROOT` | `static_root` | Override Laravel `public/` path |
+| Step | Source |
+|------|--------|
+| 1 | CLI `--config` path (if the file exists) |
+| 2 | `NUSA_CONFIG` (must point to an existing file) |
+| 3 | `./nusa.toml` in the working directory |
+| 4 | `/etc/nusa/nusa.toml` |
+| 5 | **Env-only** — no file; built-in defaults + `NUSA_*` (typical for containers) |
 
-This pattern keeps **12-factor** deployments straightforward: image holds code; ConfigMap/Secret holds runtime policy.
+Generate a starter file locally: `nusa init` or `nusa init --octane` from the Laravel project root.
+
+---
+
+## Environment variables (`NUSA_*`)
+
+Prefix: **`NUSA_`**. Values override the TOML file and built-in defaults. Use **double underscore** (`__`) only for nested TOML tables (not for flat keys like `max_workers`).
+
+### Top-level variables
+
+| Variable | TOML key | Default | Notes |
+|----------|----------|---------|--------|
+| `NUSA_CONFIG` | — | — | Path to `nusa.toml` (file must exist) |
+| `NUSA_ENGINE` | `engine` | `child` | `child`, `ffi`, or `wasm` |
+| `NUSA_MAX_WORKERS` | `max_workers` | `4` | Gateway concurrency; must be > 0 |
+| `NUSA_TIMEOUT_MS` | `timeout_ms` | `30000` | Per-request timeout (ms) |
+| `NUSA_WASM_MEMORY_MB` | `wasm_memory_mb` | `256` | WASM sandbox limit |
+| `NUSA_VFS_ROOT` | `vfs_root` | *(empty)* | Web root; auto `{code_dir}/public` when empty |
+| `NUSA_CODE_DIR` | `code_dir` | `/app` | Laravel root (`artisan`) |
+| `NUSA_TMP_DIR` | `tmp_dir` | `/tmp/nusa` | Writable sandbox; mount a volume in K8s |
+| `NUSA_HOT_RELOAD` | `hot_reload` | `true` | Set `false` in production images |
+| `NUSA_OCTANE_WORKERS` | `octane_workers` | `0` | `> 0` enables Octane worker pool |
+| `NUSA_OCTANE_MAX_MEMORY_MB` | `octane_max_memory_mb` | `512` | Recycle worker after memory (MB) |
+| `NUSA_OCTANE_MAX_REQUESTS` | `octane_max_requests` | `1000` | Recycle worker after request count |
+| `NUSA_BIND` | `bind` | `0.0.0.0:8080` | HTTP listen address |
+| `NUSA_STATIC_ROOT` | `static_root` | *(empty)* | Static files; empty → `{code_dir}/public` |
+| `NUSA_PHP_BINARY` | `php_binary` | `php` | PHP binary for `engine = "child"` |
+| `NUSA_PHP_BOOTSTRAP` | `php_bootstrap` | *(empty)* | Child IPC bootstrap script path |
+
+### Nested variables (`NUSA_<SECTION>__<KEY>`)
+
+| Variable | TOML equivalent |
+|----------|-----------------|
+| `NUSA_TLS__ENABLED` | `[tls] enabled` |
+| `NUSA_TLS__ACME_EMAIL` | `[tls] acme_email` |
+| `NUSA_REDIS__BROADCAST_URL` | `[redis] broadcast_url` |
+| `NUSA_QUIC__ENABLED` | `[quic] enabled` |
+| `NUSA_QUIC__BIND` | `[quic] bind` |
+
+Do **not** use `NUSA_TLS_ENABLED` (single underscore) for nested keys — Figment will not map it to `[tls]`.
+
+### Laravel vs Nusa env
+
+| Layer | Examples | Where |
+|-------|----------|--------|
+| Laravel | `APP_KEY`, `DB_*`, `SESSION_DRIVER` | `.env` / PHP workers |
+| Nusa | `NUSA_*` | Container / orchestrator |
+
+`NUSA_APP_KEY` has no effect; keep Laravel secrets in Laravel `.env`.
+
+### Container example (Octane, env-only)
+
+```yaml
+environment:
+  NUSA_CODE_DIR: /app
+  NUSA_TMP_DIR: /tmp/nusa
+  NUSA_OCTANE_WORKERS: "4"
+  NUSA_MAX_WORKERS: "32"
+  NUSA_TIMEOUT_MS: "30000"
+  NUSA_BIND: "0.0.0.0:8080"
+  NUSA_HOT_RELOAD: "false"
+```
+
+More detail: [Laravel on Docker](laravel/docker.md), [`docker-compose.laravel.example.yml`](../../docker-compose.laravel.example.yml).
 
 ---
 
@@ -179,5 +242,7 @@ Pair with [Production status](production-status.md) and [Migration](migration.md
 ## Related documents
 
 - [Getting started](getting-started.md)  
+- [Laravel on Docker](laravel/docker.md)  
+- [Configuration for Laravel](laravel/configuration-for-laravel.md)  
 - [Operations runbook](operations/runbook.md)  
 - [PHP ecosystem](ecosystem/package-guidelines.md)

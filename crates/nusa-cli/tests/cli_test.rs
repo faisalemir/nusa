@@ -4,8 +4,8 @@
 //! - `domain-cli`: CLI argument parsing
 //! - `coding-guidelines`: No get_ prefix, assert! with messages
 
-use clap::{CommandFactory, Parser};
 use clap::error::ErrorKind;
+use clap::{CommandFactory, Parser};
 use nusa_cli::{Cli, VERSION};
 
 #[test]
