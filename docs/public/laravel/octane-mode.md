@@ -6,6 +6,8 @@ Enable with:
 
 ```toml
 octane_workers = 4   # example: adjust to your CPU and memory
+octane_backend = "ipc" # or "embed" (stdio daemon / future libphp in-process)
+octane_standby_workers = 1 # warm workers swapped in on recycle (P99)
 octane_max_memory_mb = 512
 octane_max_requests = 1000
 ```
@@ -29,9 +31,9 @@ octane_max_requests = 1000
 HTTP request
     → nusa gateway
     → WorkerPool (when pool.is_ready())
-    → IPC (method, URI, body, headers, trace context)
+    → transport (IPC via UDS, or embed via stdio NEB1 frame)
     → PHP worker (Laravel already bootstrapped)
-    → IPC response
+    → response
     → HTTP response
 ```
 

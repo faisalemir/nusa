@@ -1,6 +1,6 @@
 # Production status
 
-This page is the contract between the Nusa team and everyone who deploys Laravel on the runtime. We describe **what is already exceptional**, **what is intentionally incomplete**, and **how we gate quality**—without pretending v0.1.0 is a finished v1.0 GA release.
+This page describes the current maturity level of Nusa and lists remaining gaps before v1.0 GA.
 
 **Workspace version:** `0.1.0` (pre-GA)
 
@@ -10,81 +10,63 @@ This page is the contract between the Nusa team and everyone who deploys Laravel
 
 | Question | Answer |
 |----------|--------|
-| Is Nusa a credible platform engineering bet? | **Yes**—architecture, sandbox, gateway, IPC, and test depth are real |
-| Can I run it in production at unlimited scale today? | **Not yet**—P3 FPM comparison numbers and P4 signed release still open |
-| Can I pilot in staging / internal platforms? | **Yes**, on Linux/Alpine; Octane path validated by `just podman-ci` + `just podman-ci-e2e` |
-| What proves quality? | **`just podman-ci`** (pre-merge) and **`just podman-ci-e2e`** (pre-GA) on Alpine musl—not host-only green runs |
-
-Nusa is **ahead of typical “0.1” projects** in systems design: kernel sandboxing, framed IPC, multi-tenant gateway controls, and thousands of tests. It is **behind GA** on formal benchmark tables (P3) and signed release artifacts (P4)—not on core Octane HTTP dispatch, which is wired and tested in Alpine CI.
-
-That combination is a strength, not a secret—we document it so you can plan migrations with confidence.
+| Can I pilot Nusa in staging? | **Yes**, on Linux/Alpine; validated by `just podman-ci` and `just podman-ci-e2e` |
+| Can I run it in production today? | **Not yet** — benchmark baselines and signed release process still open |
+| Embed backend (`octane_backend = "embed"`)? | **Experimental** — stdio daemon via `just podman-ci-embed`; libphp in-process on roadmap |
+| Authoritative CI gate? | `just podman-ci` (pre-merge), `just podman-ci-e2e` (pre-GA), `just podman-ci-embed` (embed) on Alpine musl |
 
 ---
 
-## What already works (and why it matters)
+## What works
 
-### HTTP gateway as a product surface
-
-The `nusa-gateway` crate is a full application edge—not a thin proxy:
+### Gateway features
 
 - **Health and readiness** (`/health`, `/ready`) for orchestrators
-- **Prometheus metrics** (`/metrics`) wired to a real recorder
-- **Static file serving** with caching, MIME detection, and traversal hardening
-- **WebSocket and SSE** managers for real-time Laravel features
-- **Async task API** (`/api/tasks`) to offload work without blocking the request thread
-- **Global and per-tenant circuit breakers** plus **rate limiting**
-- **Request size limits**, timeouts, and **backpressure** aligned with `max_workers`
-- **W3C TraceContext** extraction for distributed traces
+- **Prometheus metrics** (`/metrics`)
+- **Static file serving** with LRU cache, MIME detection, and precompressed `.br`/`.gz` support
+- **WebSocket and SSE** managers
+- **Async task API** (`/api/tasks`)
+- **Global and per-tenant circuit breakers** and **rate limiting**
+- **Request size limits**, timeouts, and **backpressure**
+- **W3C TraceContext** extraction
 - **Tenant routing** from `X-Tenant-Id` and host subdomains
 
-This is the layer you would otherwise assemble from nginx, Envoy, a sidecar, and custom PHP glue.
+### PHP execution
 
-### PHP execution (Normal mode)
+| Mode | Use |
+|------|-----|
+| **Octane** (`octane_workers > 0`) | Production Laravel — worker pool (`ipc` or `embed` backend) |
+| **Normal** (`octane_workers = 0`) | Debug / migration only — `PhpEngine::execute` (child fork per request) |
 
-With `engine = "child"` and `octane_workers = 0`, requests flow through `PhpEngine::execute`—the **supported production path today**. Child processes give you strong isolation semantics familiar from FPM, supervised by Rust lifecycle and error mapping to HTTP status codes.
+Default config: `octane_workers = 4`, `octane_backend = "ipc"`. See [RFC: Native Laravel runtime](../contributor/rfc/nusa-native-laravel-runtime.md).
 
-### Security enforcement on Linux
+### Security
 
-Landlock and seccomp are applied **before** the server binds. CI on Alpine musl includes enforcement tests that **fail** if sandbox application cannot be verified—no “skip on error” pattern. For regulated and multi-tenant environments, that discipline is the difference between checkbox compliance and actual containment.
+- Landlock and seccomp enforced before the server binds
+- CI enforcement tests that fail if sandbox cannot be verified
+- No "skip on error" pattern
 
-### Octane subsystem (HTTP dispatch wired — validate in Alpine)
+### Octane subsystem
 
 - **Worker pool** with fail-closed `initialize()` when `octane_workers > 0`
-- **Gateway dispatch** to `WorkerPool::handle_http_request` when `pool.is_ready()`
-- **Framed IPC** with body, headers, and trace context
+- **Gateway dispatch** via `LaravelHttpRuntime` (`ipc` or `embed`) when `is_ready()`
+- **Transport**: framed IPC JSON (`ipc`) or NEB1 binary frames (`embed` default)
 - **State reset** events on RequestReceived / RequestTerminated
-- **PHP driver** (`nusa/octane`, `NusaOctaneServiceProvider`, `nusa-octane-worker`) + Laravel minimal fixture E2E (`just podman-test-laravel`)
-
-**Alpine verification (2026-05-23, working tree):** `just podman-ci-fast` 1620/1620, `just podman-ci` workspace + Laravel E2E **14/14**, `just podman-ci-e2e` + leak 10k + IPC bench smoke green.
-
-Remaining for GA: Normal Mode vs FPM wrk/k6 tables ([`docs/benchmarks/normal-mode-report.md`](../benchmarks/normal-mode-report.md)), signed release / SBOM (P4).
-
-### Observability and operations
-
-Structured logging, metrics, and probe endpoints mean you can deploy Nusa the same way you deploy Go or Rust microservices: scrape, alert, drain, roll.
-
-### Test corpus
-
-The project maintains a **large, categorized test suite**—security, concurrency, resource exhaustion, decision tables, gateway E2E, IPC stress—run authoritatively in Alpine containers. This is unusual depth for a young runtime and is the basis for our confidence in what we mark “works.”
+- **PHP driver** (`nusa/octane`, `NusaOctaneServiceProvider`, `nusa-octane-worker`) + Laravel minimal fixture E2E
 
 ---
 
-## Known gaps (transparent roadmap)
+## Known gaps
 
-| ID | Gap | Why it blocks GA | Phase |
-|----|-----|------------------|-------|
-| G1 | Gateway HTTP → `WorkerPool` when `is_ready()` | **Addressed** — IPC dispatch with body/headers; engine when `octane_workers = 0` | — |
-| G2 | `/ready` when Octane pool required but unhealthy | **Addressed** — `/ready` checks `pool.is_ready()` | — |
-| G3 | CLI startup when `octane_workers > 0` | **Addressed** — process exits if init or ready fails | — |
-| G4 | Laravel fixture E2E in Alpine CI | **Addressed** — `tests/fixtures/laravel-minimal`, `nusa-e2e-tests`, `just podman-test-laravel` | — |
-| G5 | Normal Mode latency KPIs and signed release process | Nusa wrk numbers in [`normal-mode-report.md`](../benchmarks/normal-mode-report.md) (2026-05-23); **FPM same-host row + v1.0.0 tag** remain **P3–P4** | **P3–P4** |
-| G5b | Session / middleware Laravel E2E | **Addressed** — fixture routes + pool forwards IPC response headers | — |
-| — | IPC `Cookie` → `cookies` field | **Addressed** — parsed in `nusa-ipc`, Octane transport + child engine | — |
-| — | Landlock RW for Laravel `storage/` | **Addressed** — `apply_landlock_paths` + `laravel::writable_dirs` | — |
-| — | Config-driven tenant registry | **Addressed** — `[[tenants]]`; open mode when empty | — |
-| G6 | Blueprint “Phase 6” advanced features | **Deferred** — tracked in [post-GA blueprint](../contributor/post-ga-blueprint.md), not v0.1 scope | **P5** |
+| ID | Gap | Phase |
+|----|-----|-------|
+| G1 | FPM baseline benchmark on same host | P3 |
+| G2 | Signed release / SBOM | P4 |
+| G3 | libphp ZTS in-process production image | P4 |
+| G4 | Production async I/O (PDO proxy with bindings, writes) | P4-D |
+| G5 | Blueprint "Phase 6" advanced features (ESI, E2E) | P5 |
 
-We do not hide these behind optimistic README tables. [Migration](migration.md) and [Operations](operations/runbook.md) repeat the Octane caveat where it affects your runbooks.
+Addressed items: Octane HTTP dispatch, `/ready` fail-closed, CLI startup validation, Laravel fixture E2E, session/middleware E2E, IPC Cookie parsing, Landlock RW for `storage/`, config-driven tenant registry.
 
 ---
 
@@ -92,62 +74,51 @@ We do not hide these behind optimistic README tables. [Migration](migration.md) 
 
 | Milestone | Theme | Status |
 |-----------|-------|--------|
-| **M0** | Philosophy, plugin model, workspace governance | **Strong** — vision documented; core traits in place |
-| **M1** | Normal mode gateway, engines, config hot-reload, telemetry | **Largely complete** — primary path for pilots |
-| **M2** | Octane core, IPC, worker recycle | **Complete in CI** — HTTP dispatch + Laravel live tests in `podman-ci` |
-| **M3** | TLS, QUIC, ACME modules, WASM engine paths | **Experimental** — QUIC listener spawns when `quic.enabled`; TLS/ACME partial; WASM CLI stub only |
-| **M4** | Multi-tenant, tasks, plugins | **Largely complete** — `[[tenants]]` in config; plugins pre/post; tasks API; open registry when `tenants` empty |
-| **M5** | Benchmarks, release matrix, GA | **Partial** — Nusa wrk smoke documented; FPM baseline + signed v1.0.0 tag open (P3–P4) |
+| **M0** | Philosophy, plugin model, workspace governance | **Complete** |
+| **M1** | Normal mode gateway, engines, config, telemetry | **Complete** |
+| **M2** | Octane core, IPC, worker recycle | **Complete in CI** |
+| **M3** | TLS, QUIC, ACME modules, WASM engine paths | **Experimental** |
+| **M4** | Multi-tenant, tasks, plugins | **Complete** |
+| **M5** | Benchmarks, release matrix, GA | **Partial** — P3–P4 open |
 
 ---
 
-## Engine matrix (today)
+## Engine matrix
 
 | Engine | Role | Production today |
 |--------|------|------------------|
 | **`child`** | PHP subprocess isolation | **Yes** — default, tested Normal mode |
 | **`ffi`** | Embedded PHP (ZTS) on Linux | **Conditional** — requires compatible PHP build |
-| **`wasm`** | Sandboxed PHP (future) | **No** — CLI uses stub; not real PHP execution yet |
-
-Choose `child` unless you have a deliberate FFI validation program.
+| **`wasm`** | Sandboxed PHP (future) | **No** — CLI uses stub |
 
 ---
 
 ## How we verify releases
 
 ```bash
-just podman-build      # when image inputs change (not every CI run)
-just podman-ci-fast    # fmt + lint + workspace tests (Rust-only loop)
+just podman-build      # when image inputs change
+just podman-ci-fast    # fmt + lint + workspace tests
 just podman-ci         # pre-merge: workspace + Laravel E2E — authoritative
-just podman-ci-e2e     # pre-GA: + leak 10k + IPC bench
+just podman-ci-e2e     # pre-GA: + leak 10k + IPC bench smoke
 ```
 
-Host `just ci` helps developers on Windows or macOS iterate; it is **not** merge sign-off for production integrity.
+Host `just ci` is for local iteration only — **not** merge sign-off.
 
-### Latest Alpine sign-off log (evidence)
+### Latest Alpine sign-off
 
 | Recipe | Result | Notes |
 |--------|--------|-------|
 | `just podman-ci-fast` | **Pass** | 1620 workspace tests |
-| `just podman-ci` | **Pass** | + Laravel live E2E (`nusa-e2e-tests`) |
+| `just podman-ci` | **Pass** | + Laravel live E2E |
 | `just podman-ci-e2e` | **Pass** | + `octane_leak_suite` 10k requests + `ipc_latency_bench` smoke |
 
-Record numbers: [`docs/benchmarks/octane-ipc-report.md`](../benchmarks/octane-ipc-report.md).
+Benchmark data: [`docs/benchmarks/normal-mode-report.md`](../benchmarks/normal-mode-report.md).
 
 ---
 
-## Roadmap pointer
+## Next steps
 
-Execution phases **P0–P5** are tracked in [contributor RFC](../contributor/rfc/production-readiness.md). **P0–P2 implementation is in the repo** with **Alpine CI green on the working tree (2026-05-23)**. **P3–P4** remain: FPM comparison runs and signed release. Public docs: [Laravel developers](laravel/README.md).
-
-Test sectors **S02** (Octane dispatch), **S14** (plugins), and **S15** (Laravel live + leak) are documented in [contributor testing](../contributor/testing.md).
-
-When P4 completes, this page will flip from “pre-GA with listed gaps” to “GA criteria met”—with benchmark numbers and release artifacts linked, not adjectives.
-
----
-
-## Closing perspective
-
-Nusa is built for teams who believe **Laravel’s developer experience should not cost kernel-level naïveté**. The runtime is young on the calendar and **advanced in the engineering that survives contact with production**.
-
-Use it today to **learn, pilot, and harden your platform**; use this page to know exactly when to **bet the business**. We prefer that honesty over a premature “GA” badge—and we think you will too.
+- **Developers:** [Laravel documentation](laravel/README.md)
+- **Operators:** [Operations runbook](operations/runbook.md)
+- **Contributors:** [Contributor docs](../contributor/README.md)
+- **RFC roadmap:** [Native Laravel runtime](../contributor/rfc/nusa-native-laravel-runtime.md)

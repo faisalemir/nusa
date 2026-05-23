@@ -380,8 +380,10 @@ impl Worker {
 /// m10-performance: Telemetry-driven recycling based on RSS, error rate, GC pause.
 pub struct WorkerPool {
     workers: Vec<Worker>,
+    standby: Vec<Worker>,
     idle_queue: Vec<usize>,
     max_workers: usize,
+    standby_count: usize,
     app_root: PathBuf,
     max_memory_mb: u64,
     max_requests: u64,
@@ -397,10 +399,23 @@ impl WorkerPool {
         max_memory_mb: u64,
         max_requests: u64,
     ) -> Self {
+        Self::with_standby(max_workers, 0, app_root, max_memory_mb, max_requests)
+    }
+
+    /// Create a pool with warm standby workers (P4-A shadow pool).
+    pub fn with_standby(
+        max_workers: usize,
+        standby_workers: usize,
+        app_root: PathBuf,
+        max_memory_mb: u64,
+        max_requests: u64,
+    ) -> Self {
         Self {
             workers: Vec::with_capacity(max_workers),
+            standby: Vec::with_capacity(standby_workers),
             idle_queue: Vec::new(),
             max_workers,
+            standby_count: standby_workers,
             app_root,
             max_memory_mb,
             max_requests,
@@ -447,6 +462,10 @@ impl WorkerPool {
             self.workers.push(worker);
         }
 
+        if self.standby_count > 0 {
+            self.spawn_standby_workers().await?;
+        }
+
         if self.max_workers > 0 && !self.is_ready() {
             return Err(WorkerError::Handshake(
                 "octane pool not ready: no worker has IPC transport (PHP worker missing or failed)"
@@ -463,7 +482,56 @@ impl WorkerPool {
         if self.max_workers == 0 {
             return true;
         }
-        self.workers.len() == self.max_workers && self.workers.iter().all(Worker::has_transport)
+        let active = self.workers.len() == self.max_workers
+            && self.workers.iter().all(Worker::has_transport);
+        if self.standby_count == 0 {
+            return active;
+        }
+        active
+            && self.standby.len() == self.standby_count
+            && self.standby.iter().all(Worker::has_transport)
+    }
+
+    async fn spawn_standby_workers(&mut self) -> Result<(), WorkerError> {
+        self.standby.clear();
+        let app_root = self.app_root.clone();
+        let memory_mb = self.max_memory_mb;
+        let base_id = self.max_workers;
+
+        let mut join_set = tokio::task::JoinSet::new();
+        for offset in 0..self.standby_count {
+            let id = base_id + offset;
+            let root = app_root.clone();
+            join_set.spawn(async move {
+                let worker = Worker::spawn(id, root, memory_mb).await?;
+                Ok::<_, WorkerError>((id, worker))
+            });
+        }
+
+        let mut ready = Vec::with_capacity(self.standby_count);
+        while let Some(join_result) = join_set.join_next().await {
+            ready.push(join_result.map_err(|e| {
+                WorkerError::Handshake(format!("standby worker task join failed: {e}"))
+            })??);
+        }
+        ready.sort_by_key(|(i, _)| *i);
+        for (_, worker) in ready {
+            self.standby.push(worker);
+        }
+        Ok(())
+    }
+
+    async fn replenish_standby(&mut self) {
+        while self.standby.len() < self.standby_count {
+            let id = self.max_workers + self.standby.len();
+            match Worker::spawn(id, self.app_root.clone(), self.max_memory_mb).await {
+                Ok(worker) => self.standby.push(worker),
+                Err(e) => {
+                    warn!("standby worker {id} replenish failed: {e}");
+                    break;
+                }
+            }
+        }
     }
 
     /// True when all workers in the pool have IPC transport.
@@ -544,12 +612,10 @@ impl WorkerPool {
             return;
         }
         if self.workers[worker_id].state == WorkerState::Draining {
-            self.idle_queue.retain(|&id| id != worker_id);
             return;
         }
-        if !self.idle_queue.contains(&worker_id) {
-            self.idle_queue.push(worker_id);
-        }
+        self.workers[worker_id].state = WorkerState::Idle;
+        self.idle_queue.push(worker_id);
     }
 
     /// Recycle a worker: stop it and spawn a replacement.
@@ -560,6 +626,16 @@ impl WorkerPool {
         self.workers[worker_id].state = WorkerState::Draining;
         let had_transport = self.workers[worker_id].has_transport();
         self.workers[worker_id].stop().await?;
+
+        if let Some(mut replacement) = self.standby.pop() {
+            replacement.id = worker_id;
+            replacement.state = WorkerState::Idle;
+            self.workers[worker_id] = replacement;
+            self.idle_queue.push(worker_id);
+            info!("Worker {worker_id} recycled via warm standby");
+            self.replenish_standby().await;
+            return Ok(());
+        }
 
         let new_worker =
             match Worker::spawn(worker_id, self.app_root.clone(), self.max_memory_mb).await {
@@ -582,11 +658,12 @@ impl WorkerPool {
     pub async fn shutdown(&mut self) -> Result<(), WorkerError> {
         info!("Shutting down worker pool ({} workers)", self.workers.len());
 
-        for worker in self.workers.iter_mut() {
+        for worker in self.workers.iter_mut().chain(self.standby.iter_mut()) {
             let _ = worker.stop().await;
         }
 
         self.workers.clear();
+        self.standby.clear();
         self.idle_queue.clear();
         info!("Worker pool shut down");
         Ok(())
@@ -646,11 +723,26 @@ impl WorkerPool {
     #[doc(hidden)]
     pub fn initialize_test_stubs(&mut self) {
         self.workers.clear();
+        self.standby.clear();
         self.idle_queue.clear();
         for i in 0..self.max_workers {
             self.workers.push(Worker::new_test_stub(i));
             self.idle_queue.push(i);
         }
+        for offset in 0..self.standby_count {
+            let id = self.max_workers + offset;
+            self.standby.push(Worker::new_test_stub(id));
+        }
+    }
+
+    /// Number of warm standby workers configured.
+    pub fn standby_count(&self) -> usize {
+        self.standby_count
+    }
+
+    /// Standby workers ready for swap (tests).
+    pub fn standby_len(&self) -> usize {
+        self.standby.len()
     }
 
     /// Inject a stub worker for tests (`worker.id` must equal `workers.len()`).

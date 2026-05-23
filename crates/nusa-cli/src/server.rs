@@ -5,9 +5,10 @@ use std::time::Duration;
 
 use axum::Router;
 use nusa_config::{ConfigResolution, EngineKind, RuntimeConfig};
+use nusa_core::LaravelHttpRuntime;
 use nusa_core::{
     BackpressureGuard, PhpEngine, ResourceGuard, TaskManager, TenantConfig, TenantId,
-    TenantRateLimiter, TenantRegistry,
+    TenantRateLimiter, TenantRegistry, async_io::bridge_from_env,
 };
 use nusa_gateway::acme::{AcmeConfig, AcmeProvider, TlsService};
 use nusa_gateway::bluegreen::{BlueGreenDeployer, serving_router};
@@ -16,19 +17,17 @@ use nusa_gateway::circuit_breaker::CircuitBreaker;
 use nusa_gateway::health::HealthState;
 use nusa_gateway::quic;
 use nusa_gateway::sse::SseManager;
-use nusa_gateway::static_files::StaticFileHandler;
+use nusa_gateway::static_files::{StaticFileHandler, StaticServeConfig};
 use nusa_gateway::tenant_circuit_breaker::TenantCircuitBreakers;
 use nusa_gateway::websocket::WsManager;
-use nusa_octane_worker::pool::WorkerPool;
 use nusa_octane_worker::state_reset::StateResetOrchestrator;
 use nusa_plugin_api::PluginRegistry;
 use nusa_telemetry::metrics::NusaMetrics;
-use parking_lot::Mutex;
 use tokio::sync::Mutex as AsyncMutex;
 
 use crate::deploy;
 use crate::dev::{DevAction, DevWatcher};
-use crate::octane_pool;
+use crate::laravel_runtime::{self, SharedLaravelRuntime};
 
 /// How to start the HTTP server.
 #[derive(Debug, Clone)]
@@ -47,7 +46,7 @@ pub enum StartMode {
 /// Shared handles for dev hot-reload.
 #[derive(Clone)]
 pub struct ServerHandles {
-    pub octane_pool: Arc<AsyncMutex<Option<WorkerPool>>>,
+    pub laravel_runtime: SharedLaravelRuntime,
     pub config_path: String,
 }
 
@@ -81,32 +80,29 @@ pub fn build_engine(cfg: &RuntimeConfig) -> anyhow::Result<Arc<dyn PhpEngine>> {
     Ok(engine)
 }
 
-/// Initialize Octane pool from config (may be `None`).
-pub async fn init_pool_from_config(cfg: &RuntimeConfig) -> anyhow::Result<Option<WorkerPool>> {
-    octane_pool::init_octane_pool(
-        cfg.octane_workers,
-        std::path::PathBuf::from(&cfg.code_dir),
-        cfg.octane_max_memory_mb,
-        cfg.octane_max_requests,
-    )
-    .await
+/// Initialize Laravel runtime from config (may be `None`).
+pub async fn init_pool_from_config(
+    cfg: &RuntimeConfig,
+) -> anyhow::Result<Option<Box<dyn LaravelHttpRuntime>>> {
+    laravel_runtime::init_laravel_runtime(cfg).await
 }
 
-/// Recycle Octane workers after config or code changes (dev / hot-reload).
-pub async fn recycle_octane_pool(pool: &Arc<AsyncMutex<Option<WorkerPool>>>) -> anyhow::Result<()> {
+/// Recycle Laravel workers after config or code changes (dev / hot-reload).
+pub async fn recycle_laravel_runtime(runtime: &SharedLaravelRuntime) -> anyhow::Result<()> {
     let cfg = nusa_config::get();
     if cfg.octane_workers == 0 {
         return Ok(());
     }
-    let mut guard = pool.lock().await;
+    let mut guard = runtime.lock().await;
     if let Some(mut existing) = guard.take() {
-        existing.shutdown().await?;
+        existing.shutdown().await;
     }
     *guard = init_pool_from_config(&cfg).await?;
     if guard.is_some() {
         tracing::info!(
-            "Octane worker pool recycled ({} workers)",
-            cfg.octane_workers
+            "Laravel runtime recycled ({} workers, backend {:?})",
+            cfg.octane_workers,
+            cfg.octane_backend
         );
     }
     Ok(())
@@ -128,8 +124,8 @@ struct AppComponents {
     static_handler: Arc<StaticFileHandler>,
     metrics: Arc<NusaMetrics>,
     prometheus_handle: Arc<metrics_exporter_prometheus::PrometheusHandle>,
-    octane_pool: Arc<AsyncMutex<Option<WorkerPool>>>,
-    octane_reset: Arc<Mutex<StateResetOrchestrator>>,
+    laravel_runtime: SharedLaravelRuntime,
+    octane_reset: Arc<StateResetOrchestrator>,
 }
 
 async fn build_components(
@@ -165,23 +161,53 @@ async fn build_components(
     let ws_manager = Arc::new(WsManager::new());
     let sse_manager = Arc::new(SseManager::new());
     let static_root = nusa_config::effective_static_root(&cfg);
-    let static_handler = Arc::new(StaticFileHandler::new(static_root.into()));
+    let static_handler = Arc::new(StaticFileHandler::with_config(
+        static_root.into(),
+        StaticServeConfig::from_runtime(&cfg),
+    ));
     let metrics = Arc::new(NusaMetrics::init());
 
-    let octane_pool = match init_pool_from_config(&cfg).await? {
+    let async_io = bridge_from_env();
+    if nusa_core::async_io::async_io_stub_from_env() {
+        match async_io.select_one().await {
+            Ok(value) => tracing::info!(
+                async_io = async_io.name(),
+                value,
+                "P4-D spike: async SELECT 1 round-trip OK"
+            ),
+            Err(err) => tracing::warn!(
+                async_io = async_io.name(),
+                %err,
+                "P4-D spike: async SELECT 1 failed"
+            ),
+        }
+    } else if nusa_core::async_io::async_io_requested_from_env() {
+        tracing::warn!(
+            async_io = async_io.name(),
+            "NUSA_ASYNC_IO is set but only NUSA_ASYNC_IO=stub registers a bridge (P4-D spike)"
+        );
+    } else {
+        tracing::debug!(
+            async_io = async_io.name(),
+            "P4-D async I/O bridge (noop until proxy lands)"
+        );
+    }
+
+    let laravel_runtime = match init_pool_from_config(&cfg).await? {
         Some(pool) => {
             tracing::info!(
-                "Octane worker pool ready with {} workers",
-                cfg.octane_workers
+                "Laravel runtime ready with {} workers ({:?})",
+                cfg.octane_workers,
+                cfg.octane_backend
             );
             Some(pool)
         }
         None => None,
     };
-    let octane_pool = Arc::new(AsyncMutex::new(octane_pool));
+    let laravel_runtime = Arc::new(AsyncMutex::new(laravel_runtime));
     let mut octane_reset = StateResetOrchestrator::new(128);
     octane_reset.initialize();
-    let octane_reset = Arc::new(Mutex::new(octane_reset));
+    let octane_reset = Arc::new(octane_reset);
 
     Ok(AppComponents {
         engine,
@@ -199,7 +225,7 @@ async fn build_components(
         static_handler,
         metrics,
         prometheus_handle,
-        octane_pool,
+        laravel_runtime,
         octane_reset,
     })
 }
@@ -221,7 +247,7 @@ fn build_router(components: &AppComponents) -> Router {
         components.static_handler.clone(),
         components.metrics.clone(),
         components.prometheus_handle.clone(),
-        components.octane_pool.clone(),
+        components.laravel_runtime.clone(),
         components.octane_reset.clone(),
     )
 }
@@ -294,7 +320,7 @@ fn spawn_dev_actions(watcher: DevWatcher, handles: ServerHandles) -> tokio::task
                     }
                 }
                 DevAction::RecycleWorkers | DevAction::InvalidateOpCache => {
-                    if let Err(e) = recycle_octane_pool(&handles.octane_pool).await {
+                    if let Err(e) = recycle_laravel_runtime(&handles.laravel_runtime).await {
                         tracing::error!(err = %e, "dev: worker recycle failed");
                     }
                 }
@@ -365,7 +391,7 @@ pub async fn start_server(
     spawn_optional_services(&components);
 
     let handles = ServerHandles {
-        octane_pool: components.octane_pool.clone(),
+        laravel_runtime: components.laravel_runtime.clone(),
         config_path: blue_path.clone(),
     };
 
@@ -377,7 +403,7 @@ pub async fn start_server(
     let deployer = Arc::new(BlueGreenDeployer::new(initial_router));
 
     let mut engine_shutdown = components.engine.clone();
-    let mut octane_pool_shutdown = components.octane_pool.clone();
+    let mut laravel_runtime_shutdown = components.laravel_runtime.clone();
     let health_state = components.health_state.clone();
 
     if let Some(green_path) = green_path {
@@ -391,7 +417,7 @@ pub async fn start_server(
             deploy::write_deploy_state(&blue_path, &green_path)?;
             tracing::info!("deploy: switched active slot to green ({green_path})");
             engine_shutdown = green_components.engine.clone();
-            octane_pool_shutdown = green_components.octane_pool.clone();
+            laravel_runtime_shutdown = green_components.laravel_runtime.clone();
         } else {
             anyhow::bail!("deploy: standby slot failed health check");
         }
@@ -413,9 +439,9 @@ pub async fn start_server(
     let shutdown = async move {
         tokio::signal::ctrl_c().await.ok();
         tracing::info!("nusa shutdown signal received");
-        let pool_opt = octane_pool_shutdown.lock().await.take();
+        let pool_opt = laravel_runtime_shutdown.lock().await.take();
         if let Some(mut pool) = pool_opt {
-            let _ = pool.shutdown().await;
+            pool.shutdown().await;
         }
         engine_shutdown.shutdown().await;
     };

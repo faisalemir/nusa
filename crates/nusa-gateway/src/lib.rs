@@ -40,18 +40,16 @@ use axum::{
     Json, Router,
     body::Body,
     extract::State,
-    http::{Request, StatusCode},
+    http::{Request, StatusCode, header},
     response::Response,
 };
 use nusa_core::{
-    BackpressureGuard, PhpEngine, PhpResponse, RequestContext, ResourceGuard, TaskManager,
-    TenantRateLimiter, TenantRegistry, with_timeout,
+    BackpressureGuard, LaravelHttpRuntime, PhpEngine, PhpResponse, RequestContext, ResourceGuard,
+    TaskManager, TenantRateLimiter, TenantRegistry, with_timeout,
 };
-use nusa_octane_worker::pool::WorkerPool;
 use nusa_octane_worker::state_reset::StateResetOrchestrator;
 use nusa_plugin_api::PluginRegistry;
 use nusa_telemetry::metrics::NusaMetrics;
-use parking_lot::Mutex;
 
 /// Shared application state (all fields Arc-wrapped for Clone + thread-safety).
 #[derive(Clone)]
@@ -71,11 +69,12 @@ pub struct AppState {
     pub static_handler: Arc<StaticFileHandler>,
     pub metrics: Arc<NusaMetrics>,
     pub prometheus_handle: Arc<metrics_exporter_prometheus::PrometheusHandle>,
-    /// Octane worker pool (M2: Octane Core).
+    /// Laravel Octane runtime (IPC or embed backend).
     /// `tokio::sync::Mutex` so handlers can `.await` dispatch without holding `parking_lot` guards.
-    pub octane_pool: Arc<tokio::sync::Mutex<Option<WorkerPool>>>,
+    pub laravel_runtime: Arc<tokio::sync::Mutex<Option<Box<dyn LaravelHttpRuntime>>>>,
     /// Octane state reset orchestrator.
-    pub octane_reset: Arc<Mutex<StateResetOrchestrator>>,
+    /// `emit_event` is `&self` (atomic counters + broadcast) — no Mutex needed.
+    pub octane_reset: Arc<StateResetOrchestrator>,
 }
 
 /// Main application router with all Blueprint 6 endpoints.
@@ -96,8 +95,8 @@ pub fn app(
     static_handler: Arc<StaticFileHandler>,
     metrics: Arc<NusaMetrics>,
     prometheus_handle: Arc<metrics_exporter_prometheus::PrometheusHandle>,
-    octane_pool: Arc<tokio::sync::Mutex<Option<WorkerPool>>>,
-    octane_reset: Arc<Mutex<StateResetOrchestrator>>,
+    laravel_runtime: Arc<tokio::sync::Mutex<Option<Box<dyn LaravelHttpRuntime>>>>,
+    octane_reset: Arc<StateResetOrchestrator>,
 ) -> Router {
     let state = AppState {
         engine,
@@ -115,7 +114,7 @@ pub fn app(
         static_handler,
         metrics,
         prometheus_handle,
-        octane_pool,
+        laravel_runtime,
         octane_reset,
     };
 
@@ -126,9 +125,9 @@ pub fn app(
             "/ready",
             axum::routing::get({
                 let hs = state.health_state.clone();
-                let octane_pool = state.octane_pool.clone();
+                let laravel_runtime = state.laravel_runtime.clone();
                 move || async move {
-                    let octane_ok = match octane_pool.lock().await.as_ref() {
+                    let octane_ok = match laravel_runtime.lock().await.as_ref() {
                         None => true,
                         Some(pool) => pool.is_ready(),
                     };
@@ -201,9 +200,20 @@ async fn ws_upgrade_handler(
 async fn static_file_handler(
     State(state): State<AppState>,
     axum::extract::Path(path): axum::extract::Path<String>,
+    headers: axum::http::HeaderMap,
 ) -> Response<Body> {
-    match state.static_handler.serve(&path).await {
-        Some(resp) => resp,
+    let accept = headers
+        .get(header::ACCEPT_ENCODING)
+        .and_then(|v| v.to_str().ok());
+    match state
+        .static_handler
+        .serve(&path, &http::Method::GET, accept)
+        .await
+    {
+        Some(resp) => {
+            state.metrics.static_served_total.increment(1);
+            resp
+        }
         None => response::status_response(StatusCode::NOT_FOUND, "Not Found"),
     }
 }
@@ -342,10 +352,45 @@ async fn handler(State(state): State<AppState>, req: Request<Body>) -> Response<
         return response::status_response(status, format!("Plugin Error: {e}"));
     }
 
-    let ctx_post = ctx.clone();
+    // Tier-S2: plugin short-circuit (full response without PHP/Octane).
+    if let Some(php_resp) = ctx.take_short_circuit() {
+        state.metrics.tier_s2_short_circuit_total.increment(1);
+        state.circuit_breaker.record_success();
+        drop(permit);
+        state
+            .metrics
+            .request_duration_ms
+            .record(start.elapsed().as_secs_f64() * 1000.0);
+        return build_http_response(php_resp);
+    }
+
+    // Tier-S1: serve static extensions from `static_root` before PHP (GET/HEAD only).
+    if matches!(method.as_str(), "GET" | "HEAD") {
+        let static_rel = uri.path().trim_start_matches('/');
+        let accept = ctx
+            .headers()
+            .get(header::ACCEPT_ENCODING)
+            .and_then(|v| v.to_str().ok());
+        if !static_rel.is_empty()
+            && StaticFileHandler::is_static(static_rel)
+            && let Some(resp) = state
+                .static_handler
+                .serve(static_rel, &method, accept)
+                .await
+        {
+            state.metrics.static_served_total.increment(1);
+            state.circuit_breaker.record_success();
+            drop(permit);
+            state
+                .metrics
+                .request_duration_ms
+                .record(start.elapsed().as_secs_f64() * 1000.0);
+            return resp;
+        }
+    }
 
     let octane_mode = {
-        let guard = state.octane_pool.lock().await;
+        let guard = state.laravel_runtime.lock().await;
         match guard.as_ref() {
             None => OctaneRoute::Engine,
             Some(pool) if pool.is_ready() => OctaneRoute::Pool,
@@ -364,8 +409,10 @@ async fn handler(State(state): State<AppState>, req: Request<Body>) -> Response<
     }
 
     let timeout_ms = state.resource_guard.request_timeout_ms;
+    let mut ctx_post: Option<RequestContext> = None;
     let execution = match octane_mode {
         OctaneRoute::Pool => {
+            ctx_post = Some(ctx.clone());
             let headers = http_headers_to_ipc(ctx.headers());
             let body = if ctx.body().is_empty() {
                 None
@@ -373,27 +420,25 @@ async fn handler(State(state): State<AppState>, req: Request<Body>) -> Response<
                 Some(ctx.body().to_vec())
             };
             let request_id = ctx.trace_id().to_string();
-            state.octane_reset.lock().emit_event(
-                nusa_octane_worker::state_reset::OctaneEvent::RequestReceived {
-                    request_id: request_id.clone(),
-                },
+            state.octane_reset.emit_event(
+                nusa_octane_worker::state_reset::OctaneEvent::RequestReceived { request_id },
             );
-            let pool = state.octane_pool.clone();
             let reset = state.octane_reset.clone();
+            let runtime = state.laravel_runtime.clone();
+            let request_id_for_terminate = ctx.trace_id().to_string();
             let result = with_timeout(timeout_ms, async move {
-                let mut pool_guard = pool.lock().await;
-                let pool = pool_guard
+                let mut guard = runtime.lock().await;
+                let pool = guard
                     .as_mut()
-                    .expect("OctaneRoute::Pool implies Some(pool)");
+                    .expect("OctaneRoute::Pool implies Some(runtime)");
                 pool.handle_http_request(method_str, uri_str, headers, body, timeout_ms)
                     .await
-                    .map_err(|e| nusa_core::EngineError::IpcProtocol(e.to_string()))
             })
             .await;
             let status = result.as_ref().map(|r| r.status).unwrap_or(500);
-            reset.lock().emit_event(
+            reset.emit_event(
                 nusa_octane_worker::state_reset::OctaneEvent::RequestTerminated {
-                    request_id,
+                    request_id: request_id_for_terminate,
                     status,
                 },
             );
@@ -405,7 +450,9 @@ async fn handler(State(state): State<AppState>, req: Request<Body>) -> Response<
 
     match execution {
         Ok(res) => {
-            if let Err(e) = state.plugins.run_post_exec(&ctx_post).await {
+            if let Some(ctx_post) = &ctx_post
+                && let Err(e) = state.plugins.run_post_exec(ctx_post).await
+            {
                 state.metrics.requests_failed_total.increment(1);
                 state.health_state.record_error();
                 drop(permit);
@@ -515,14 +562,14 @@ async fn build_request_context(
 /// Convert PhpResponse to HTTP Response.
 fn build_http_response(php_resp: PhpResponse) -> Response<Body> {
     let status = StatusCode::from_u16(php_resp.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
-    let body_bytes = php_resp.body.to_vec();
     let mut builder = Response::builder().status(status);
     for (name, value) in php_resp.headers.iter() {
         if let Ok(v) = value.to_str() {
             builder = builder.header(name, v);
         }
     }
-    builder
-        .body(Body::from(body_bytes.clone()))
-        .unwrap_or_else(|_| response::status_response(status, body_bytes))
+    match builder.body(Body::from(php_resp.body)) {
+        Ok(resp) => resp,
+        Err(_) => response::status_response(status, "Failed to build response"),
+    }
 }

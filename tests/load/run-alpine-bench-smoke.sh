@@ -113,6 +113,42 @@ OCTANE_P99="$p99"
 OCTANE_RPS="$rps"
 stop_server
 
+# --- Octane embed (stdio daemon, JSON transport) ---
+sh dockerfiles/podman-laravel-fixture.sh
+NUSA_EMBED_TRANSPORT=json "$BIN" --config /src/tests/load/nusa-bench-embed.toml >/tmp/nusa-bench-embed.log 2>&1 &
+NUSA_PID=$!
+trap stop_server EXIT
+wait_ready "http://127.0.0.1:18082/ready"
+curl -sf "http://127.0.0.1:18082/nusa-ping" >/dev/null || {
+  echo "Embed warm-up failed; log:" >&2
+  tail -30 /tmp/nusa-bench-embed.log >&2
+  exit 1
+}
+run_wrk "embed-ping" "http://127.0.0.1:18082/nusa-ping"
+EMBED_JSON_P50="$p50"
+EMBED_JSON_P99="$p99"
+EMBED_JSON_RPS="$rps"
+stop_server
+trap - EXIT
+
+# --- Octane embed + NEB1 frame transport ---
+sh dockerfiles/podman-laravel-fixture.sh
+NUSA_EMBED_TRANSPORT=frame "$BIN" --config /src/tests/load/nusa-bench-embed.toml >/tmp/nusa-bench-embed-frame.log 2>&1 &
+NUSA_PID=$!
+trap stop_server EXIT
+wait_ready "http://127.0.0.1:18082/ready"
+curl -sf "http://127.0.0.1:18082/nusa-ping" >/dev/null || {
+  echo "Embed frame warm-up failed; log:" >&2
+  tail -30 /tmp/nusa-bench-embed-frame.log >&2
+  exit 1
+}
+run_wrk "embed-frame-ping" "http://127.0.0.1:18082/nusa-ping"
+EMBED_FRAME_P50="$p50"
+EMBED_FRAME_P99="$p99"
+EMBED_FRAME_RPS="$rps"
+stop_server
+trap - EXIT
+
 SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 DATE=$(date -u +%Y-%m-%d)
 SUMMARY="docs/benchmarks/artifacts/normal-smoke-${DATE}.md"
@@ -124,7 +160,9 @@ Git: \`${SHA}\` | Environment: Alpine musl (Podman) | Duration: ${WRK_DURATION:-
 | Scenario | URL | P50 | P99 | RPS |
 |----------|-----|-----|-----|-----|
 | S1 child GET / | nusa-bench-child | ${CHILD_P50} | ${CHILD_P99} | ${CHILD_RPS} |
-| S2 Octane GET /nusa-ping | nusa-bench-octane | ${OCTANE_P50} | ${OCTANE_P99} | ${OCTANE_RPS} |
+| S2 Octane IPC GET /nusa-ping | nusa-bench-octane | ${OCTANE_P50} | ${OCTANE_P99} | ${OCTANE_RPS} |
+| S2-embed JSON GET /nusa-ping | nusa-bench-embed | ${EMBED_JSON_P50} | ${EMBED_JSON_P99} | ${EMBED_JSON_RPS} |
+| S2-embed frame GET /nusa-ping | nusa-bench-embed + NEB1 | ${EMBED_FRAME_P50} | ${EMBED_FRAME_P99} | ${EMBED_FRAME_RPS} |
 
 FPM baseline still required on the same host before GA — see [normal-mode-report.md](../normal-mode-report.md).
 EOF

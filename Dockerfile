@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # === Stage 1: Build PHP ZTS ===
-FROM alpine:3.19 AS php-builder
+FROM alpine:3.21 AS php-builder
 RUN apk add --no-cache \
     gcc g++ make autoconf automake libtool pkgconfig \
     libxml2-dev sqlite-dev zlib-dev libpng-dev \
@@ -9,7 +9,7 @@ RUN apk add --no-cache \
     linux-headers
 
 WORKDIR /src
-RUN curl -fsSL https://www.php.net/distributions/php-8.3.6.tar.gz -o php.tar.gz \
+RUN curl -fsSL https://www.php.net/distributions/php-8.5.0.tar.gz -o php.tar.gz \
     && tar xzf php.tar.gz --strip-components=1 \
     && ./configure \
         --prefix=/usr/local/php \
@@ -41,12 +41,12 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     cargo build --release --target x86_64-unknown-linux-musl --bin nusa
 
 # === Stage 3: Runtime ===
-FROM alpine:3.19 AS runtime
+FROM alpine:3.21 AS runtime
 
 # Install runtime dependencies
 RUN apk add --no-cache \
     ca-certificates tzdata \
-    php8-cli php8-json php8-mbstring php8-pdo php8-sqlite3 \
+    php85-cli php85-json php85-mbstring php85-pdo php85-sqlite3 \
     && addgroup -g 1000 nusa \
     && adduser -u 1000 -G nusa -s /bin/sh -D nusa \
     && mkdir -p /app/public /tmp/nusa /app/.octane \

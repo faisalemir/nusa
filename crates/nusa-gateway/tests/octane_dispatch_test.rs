@@ -10,12 +10,11 @@ use async_trait::async_trait;
 use axum::body::to_bytes;
 use axum::{Router, body::Body, http::Request};
 use http::HeaderValue;
-use parking_lot::Mutex;
 use tower::ServiceExt;
 
 use nusa_core::{
-    BackpressureGuard, PhpEngine, PhpResponse, RequestContext, ResourceGuard, TaskManager,
-    TenantRateLimiter, TenantRegistry,
+    BackpressureGuard, LaravelHttpRuntime, PhpEngine, PhpResponse, RequestContext, ResourceGuard,
+    TaskManager, TenantRateLimiter, TenantRegistry,
 };
 use nusa_gateway::app;
 use nusa_gateway::circuit_breaker::CircuitBreaker;
@@ -68,7 +67,7 @@ impl PhpEngine for CountingEngine {
 fn build_app(
     engine: Arc<dyn PhpEngine>,
     health_state: Arc<HealthState>,
-    octane_pool: Arc<tokio::sync::Mutex<Option<WorkerPool>>>,
+    laravel_runtime: Arc<tokio::sync::Mutex<Option<Box<dyn LaravelHttpRuntime>>>>,
 ) -> Router {
     let resource_guard = ResourceGuard {
         max_request_bytes: 1024 * 1024,
@@ -94,9 +93,17 @@ fn build_app(
         Arc::new(StaticFileHandler::new("/tmp".into())),
         Arc::new(NusaMetrics::init()),
         prometheus_handle,
-        octane_pool,
-        Arc::new(Mutex::new(reset)),
+        laravel_runtime,
+        Arc::new(reset),
     )
+}
+
+fn pool_as_runtime(
+    pool: WorkerPool,
+) -> Arc<tokio::sync::Mutex<Option<Box<dyn LaravelHttpRuntime>>>> {
+    Arc::new(tokio::sync::Mutex::new(Some(
+        Box::new(pool) as Box<dyn LaravelHttpRuntime>
+    )))
 }
 
 async fn ready_pool() -> WorkerPool {
@@ -124,13 +131,13 @@ async fn ready_returns_503_when_octane_pool_not_ready() {
     let health = Arc::new(HealthState::new());
     health.mark_ready();
 
-    let octane_pool = Arc::new(tokio::sync::Mutex::new(Some(pool)));
+    let laravel_runtime = pool_as_runtime(pool);
     let app = build_app(
         Arc::new(CountingEngine {
             calls: Arc::new(AtomicUsize::new(0)),
         }),
         health,
-        octane_pool,
+        laravel_runtime,
     );
 
     let response = app
@@ -157,7 +164,7 @@ async fn ready_returns_200_when_octane_pool_ready() {
             calls: Arc::new(AtomicUsize::new(0)),
         }),
         health,
-        Arc::new(tokio::sync::Mutex::new(Some(pool))),
+        pool_as_runtime(pool),
     );
 
     let response = app
@@ -180,12 +187,13 @@ async fn handler_uses_engine_when_octane_disabled() {
         calls: calls.clone(),
     });
 
-    let octane_pool = Arc::new(tokio::sync::Mutex::new(None));
+    let laravel_runtime: Arc<tokio::sync::Mutex<Option<Box<dyn LaravelHttpRuntime>>>> =
+        Arc::new(tokio::sync::Mutex::new(None));
 
     let health = Arc::new(HealthState::new());
     health.mark_ready();
 
-    let app = build_app(engine, health, octane_pool);
+    let app = build_app(engine, health, laravel_runtime);
 
     let response = app
         .oneshot(
@@ -209,12 +217,12 @@ async fn handler_returns_503_when_octane_pool_configured_but_not_ready() {
 
     let mut pool = WorkerPool::new(1, std::path::PathBuf::from("/tmp"), 512, 1000);
     pool.initialize_test_stubs();
-    let octane_pool = Arc::new(tokio::sync::Mutex::new(Some(pool)));
+    let laravel_runtime = pool_as_runtime(pool);
 
     let health = Arc::new(HealthState::new());
     health.mark_ready();
 
-    let app = build_app(engine.clone(), health, octane_pool);
+    let app = build_app(engine.clone(), health, laravel_runtime);
 
     let response = app
         .oneshot(
@@ -242,12 +250,12 @@ async fn handler_uses_pool_when_ready_not_engine() {
     });
 
     let pool = ready_pool().await;
-    let octane_pool = Arc::new(tokio::sync::Mutex::new(Some(pool)));
+    let laravel_runtime = pool_as_runtime(pool);
 
     let health = Arc::new(HealthState::new());
     health.mark_ready();
 
-    let app = build_app(engine, health, octane_pool);
+    let app = build_app(engine, health, laravel_runtime);
 
     let response = app
         .oneshot(
@@ -289,7 +297,7 @@ async fn handler_post_forwards_body_to_octane_pool() {
             h.mark_ready();
             h
         },
-        Arc::new(tokio::sync::Mutex::new(Some(pool))),
+        pool_as_runtime(pool),
     );
 
     let payload = b"tenant=payload&x=1";
@@ -332,7 +340,7 @@ async fn handler_forwards_custom_header_to_octane_pool() {
             h.mark_ready();
             h
         },
-        Arc::new(tokio::sync::Mutex::new(Some(pool))),
+        pool_as_runtime(pool),
     );
 
     let response = app
@@ -370,7 +378,7 @@ async fn concurrent_requests_use_pool_without_engine() {
             h.mark_ready();
             h
         },
-        Arc::new(tokio::sync::Mutex::new(Some(pool))),
+        pool_as_runtime(pool),
     );
 
     let r1 = app

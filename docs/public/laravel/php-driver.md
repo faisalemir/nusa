@@ -1,6 +1,6 @@
 # PHP driver package (`nusa/octane`)
 
-The **`nusa/octane`** Composer package (source in the repo directory **`php-driver/`**) connects Laravel to Nusa’s worker pool. It registers **`Nusa\Octane\NusaOctaneServiceProvider`** and ships the long-lived worker binary **`nusa-octane-worker`** that Nusa spawns in Octane mode.
+The **`nusa/octane`** Composer package (source in the repo directory **`php-driver/`**) connects Laravel to Nusa’s worker pool. It requires **PHP 8.5+** (see [PHP 8.5 and Nusa](php-85.md)). It registers **`Nusa\Octane\NusaOctaneServiceProvider`** and ships the long-lived worker binary **`nusa-octane-worker`** that Nusa spawns in Octane mode.
 
 ---
 
@@ -128,6 +128,19 @@ Nusa already embeds the gateway; you do not run `rr serve` alongside `nusa`.
 ## Version alignment
 
 Keep **`nusa/octane`** on the same release line as the `nusa` binary. IPC handshake assumes compatible message formats.
+
+---
+
+## Embed async I/O (experimental)
+
+When using **`octane_backend = embed`** with stdio transport, NEB1 frame transport is the default. To use JSON fallback:
+
+```bash
+export NUSA_EMBED_TRANSPORT=json
+export NUSA_ASYNC_IO=stub
+```
+
+Read-only `DB::select` / `selectOne` without bindings on the default **sqlite** connection can route through Rust (`NusaAsyncSqliteConnection`). See [async-io-offload.md](../../contributor/spike/async-io-offload.md).
 
 ---
 

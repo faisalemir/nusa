@@ -17,13 +17,23 @@ code_dir = "/app"
 vfs_root = "/app/public"
 tmp_dir = "/tmp/nusa"
 
-hot_reload = true
-octane_workers = 0
+hot_reload = false
+octane_workers = 4
+octane_backend = "ipc"
 octane_max_memory_mb = 512
 octane_max_requests = 1000
+octane_standby_workers = 1
 bind = "0.0.0.0:8080"
 static_root = ""
+# Tier-S1 Cache-Control max-age (seconds)
+static_cache_max_age_secs = 3600
+static_cache_immutable_max_age_secs = 31536000
+static_cache_max_entries = 1000
+static_cache_ttl_secs = 300
+# Optional build-time siblings: app.js.br / app.js.gz served when Accept-Encoding matches
+# P4-D embed: NUSA_ASYNC_IO=stub, NUSA_EMBED_TRANSPORT=json (to opt out of frame default), optional NUSA_ASYNC_SQLITE_PATH
 
+# Alpine CI: `php` → php85 via symlink; host may use php85 explicitly
 php_binary = "php"
 # php_bootstrap = "/path/to/bootstrap/nusa-child-ipc.php"
 

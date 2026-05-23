@@ -1,6 +1,6 @@
 # Nusa — run Laravel on a modern PHP runtime
 
-**One process for HTTP, health checks, metrics, and (optionally) Octane-style workers.** You keep Laravel, Composer, and your routes. Nusa replaces the usual **nginx + php-fpm + Supervisor** stack with a single `nusa` binary.
+**One process for HTTP, health checks, metrics, and (optionally) Octane-style workers.** You keep Laravel, Composer, and your routes. Nusa replaces **nginx + php-fpm + Supervisor** with a single `nusa` binary.
 
 [![Version](https://img.shields.io/badge/version-0.1.0-blue)](docs/public/production-status.md)
 [![License](https://img.shields.io/badge/license-MIT-green)](#license)
@@ -32,14 +32,14 @@ You still run **`php artisan`**, **Composer**, **Eloquent**, and your **`routes/
 | **Normal** | `octane_workers = 0` | php-fpm — fresh request each time | First install, migrations from FPM, max isolation |
 | **Octane** | `octane_workers = 4` (example) | Laravel Octane / RoadRunner — warm workers | Throughput, APIs under load |
 
-```text
+```
   Browser
      │
      ▼
   nusa (HTTP + /health /ready /metrics)
      │
      ├─ Normal  → PHP per request
-     └─ Octane  → Laravel workers (`nusa/octane`, `nusa-octane-worker`) over IPC
+     └─ Octane  → Laravel workers (`nusa/octane`, `nusa-octane-worker`) over IPC or embed (NEB1 frame)
 ```
 
 Octane mode **fails closed**: if workers cannot start, `nusa` exits and `/ready` returns 503 until the pool is healthy.
@@ -50,7 +50,7 @@ Guides: [Normal mode](docs/public/laravel/normal-mode.md) · [Octane mode](docs/
 
 ## Quick start
 
-**Requirements:** PHP 8.2+, Composer, Rust 1.95+ (to build `nusa` from source).
+**Requirements:** PHP 8.5+ (8.5.6 in CI), Composer, Rust 1.95+ (to build `nusa` from source).
 
 ```bash
 git clone https://github.com/nusa-rs/nusa.git
