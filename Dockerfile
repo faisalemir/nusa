@@ -56,7 +56,8 @@ WORKDIR /app
 
 # Copy Rust binary
 COPY --from=rust-builder /src/target/x86_64-unknown-linux-musl/release/nusa /bin/nusa
-COPY --chmod=0644 config.toml.example /app/config.toml
+# Optional: mount nusa.toml or use NUSA_* env only (recommended for Laravel)
+COPY --chmod=0644 config.toml.example /etc/nusa/nusa.toml.example
 
 # Copy PHP driver
 COPY --from=php-builder /usr/local/php /usr/local/php
@@ -69,14 +70,17 @@ RUN chmod +x /bin/nusa
 VOLUME ["/app/public", "/tmp/nusa"]
 
 ENV RUST_LOG=info \
-    NUSA_VFS_ROOT=/app/public \
-    NUSA_TMP_DIR=/tmp/nusa
+    NUSA_CODE_DIR=/app \
+    NUSA_TMP_DIR=/tmp/nusa \
+    NUSA_OCTANE_WORKERS=4 \
+    NUSA_MAX_WORKERS=16 \
+    NUSA_HOT_RELOAD=false
 
 EXPOSE 8080 9090
 USER nusa
 
 ENTRYPOINT ["/bin/nusa"]
-CMD ["--config", "/app/config.toml"]
+CMD []
 
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
   CMD wget -qO- http://localhost:8080/health || exit 1

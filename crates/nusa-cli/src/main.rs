@@ -77,7 +77,40 @@ async fn handle_subcommand(cmd: Commands) -> anyhow::Result<()> {
             tracing::info!("Rolling back to previous deployment config");
             start_server("", StartMode::Rollback, None).await
         }
+        Commands::Init {
+            octane,
+            output,
+            force,
+        } => run_init(octane, &output, force),
     }
+}
+
+fn run_init(octane: bool, output: &str, force: bool) -> anyhow::Result<()> {
+    let out = std::path::Path::new(output);
+    if out.exists() && !force {
+        anyhow::bail!(
+            "{output} already exists; use --force to overwrite or run `nusa` with NUSA_* env only"
+        );
+    }
+
+    let root = nusa_config::laravel::detect_project_root(&std::env::current_dir()?)
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "no Laravel project found (artisan missing); run from your app root or set paths via NUSA_CODE_DIR"
+            )
+        })?;
+
+    let workers = if octane { 4 } else { 0 };
+    let contents = nusa_config::laravel::render_starter_toml(&root, workers);
+    std::fs::write(out, contents)?;
+    println!(
+        "Wrote {} (code_dir={})",
+        out.display(),
+        root.display()
+    );
+    println!("Start: nusa --config {}", out.display());
+    println!("Or container-only: set NUSA_CODE_DIR and NUSA_OCTANE_WORKERS (see docs/public/laravel/docker.md)");
+    Ok(())
 }
 
 fn cli_config_path() -> String {

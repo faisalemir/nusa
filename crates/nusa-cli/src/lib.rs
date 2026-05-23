@@ -80,4 +80,19 @@ pub enum Commands {
 
     /// Rollback to previous deployment
     Rollback,
+
+    /// Write a starter `nusa.toml` for the current Laravel project
+    Init {
+        /// Enable Octane workers in the generated file (`octane_workers = 4`)
+        #[arg(long)]
+        octane: bool,
+
+        /// Output path
+        #[arg(long, default_value = "nusa.toml")]
+        output: String,
+
+        /// Overwrite existing file
+        #[arg(long)]
+        force: bool,
+    },
 }

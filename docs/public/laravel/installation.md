@@ -64,11 +64,22 @@ my-laravel-app/          ← code_dir (application root)
 
 ---
 
-## Create `nusa.toml`
+## Create configuration
+
+**Fastest (local):**
+
+```bash
+nusa init              # writes nusa.toml from current directory
+nusa init --octane     # Octane starter (4 workers)
+```
+
+**Or copy the example:**
 
 ```bash
 cp config.toml.example nusa.toml
 ```
+
+**Containers:** skip the file — set `NUSA_CODE_DIR`, `NUSA_OCTANE_WORKERS`, etc. See [Docker & env](docker.md).
 
 Minimum for Normal mode:
 

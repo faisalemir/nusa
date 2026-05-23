@@ -28,7 +28,12 @@ This section is the **primary documentation** for teams building and shipping La
 3. [Migration from PHP-FPM](../migration.md#from-php-fpm)  
 4. [Deploy checklist](deployment-checklist.md)  
 
-### Path D — Production launch
+### Path D — Docker / Kubernetes (env-only config)
+
+1. [Docker & `NUSA_*` env](docker.md)  
+2. [Deploy checklist](deployment-checklist.md)  
+
+### Path E — Production launch
 
 1. [Production status](../production-status.md)  
 2. [Compatibility matrix](../compatibility-matrix.md)  

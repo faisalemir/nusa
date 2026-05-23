@@ -10,6 +10,7 @@
 //! - `m12-lifecycle`: Load → watch → reload lifecycle
 //! - `m07-concurrency`: LazyLock for global config initialization
 
+use std::path::Path;
 use std::sync::LazyLock;
 
 use arc_swap::ArcSwap;
@@ -19,6 +20,8 @@ use figment::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+
+pub mod laravel;
 
 /// Runtime configuration for the Nusa PHP runtime.
 ///
@@ -141,14 +144,19 @@ pub enum EngineKind {
     Child,
 }
 
-fn default_config() -> RuntimeConfig {
+/// Built-in defaults (Laravel-friendly container layout).
+pub fn default_config() -> RuntimeConfig {
+    laravel::container_defaults()
+}
+
+pub(crate) fn builtin_defaults() -> RuntimeConfig {
     RuntimeConfig {
         engine: EngineKind::Child,
         max_workers: 4,
         timeout_ms: 30_000,
         wasm_memory_mb: 256,
-        vfs_root: "/app/public".into(),
-        code_dir: "/app/public".into(),
+        vfs_root: String::new(),
+        code_dir: "/app".into(),
         tmp_dir: "/tmp/nusa".into(),
         hot_reload: true,
         octane_workers: 0, // disabled by default
@@ -167,38 +175,101 @@ fn default_config() -> RuntimeConfig {
 static CONFIG: LazyLock<ArcSwap<RuntimeConfig>> =
     LazyLock::new(|| ArcSwap::from_pointee(default_config()));
 
+/// How configuration was resolved at startup.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConfigResolution {
+    /// Loaded from this TOML path (may not exist if misconfigured).
+    File(std::path::PathBuf),
+    /// No file; defaults + `NUSA_*` environment only (12-factor / containers).
+    EnvOnly,
+}
+
+/// Resolve config file: CLI path → `NUSA_CONFIG` → `./nusa.toml` → `/etc/nusa/nusa.toml`.
+pub fn resolve_config_path(cli_arg: &str) -> anyhow::Result<ConfigResolution> {
+    let cli = Path::new(cli_arg);
+    if cli.exists() {
+        return Ok(ConfigResolution::File(cli.to_path_buf()));
+    }
+
+    if let Ok(path) = std::env::var("NUSA_CONFIG") {
+        let p = Path::new(&path);
+        if p.exists() {
+            return Ok(ConfigResolution::File(p.to_path_buf()));
+        }
+        anyhow::bail!("NUSA_CONFIG points to missing file: {path}");
+    }
+
+    for candidate in ["nusa.toml", "/etc/nusa/nusa.toml"] {
+        let p = Path::new(candidate);
+        if p.exists() {
+            return Ok(ConfigResolution::File(p.to_path_buf()));
+        }
+    }
+
+    if cli_arg != "nusa.toml" {
+        anyhow::bail!("config file not found: {cli_arg}");
+    }
+
+    Ok(ConfigResolution::EnvOnly)
+}
+
+fn build_figment(config_path: Option<&str>) -> Figment {
+    let mut figment = Figment::new().merge(Serialized::defaults(builtin_defaults()));
+
+    if let Some(path) = config_path
+        && Path::new(path).exists()
+    {
+        figment = figment.merge(Toml::file(path));
+    }
+
+    // `NUSA_MAX_WORKERS` → `max_workers`; `NUSA_TLS__ENABLED` → `tls.enabled`.
+    figment.merge(Env::prefixed("NUSA_").split("__"))
+}
+
+/// Reject corrupt TOML before merge so hot-reload keeps the last good snapshot.
+fn ensure_toml_file_valid(path: &str) -> anyhow::Result<()> {
+    let content = std::fs::read_to_string(path)?;
+    toml::from_str::<toml::Table>(&content)
+        .map_err(|e| anyhow::anyhow!("invalid TOML in {path}: {e}"))?;
+    Ok(())
+}
+
+fn validate_config(cfg: &RuntimeConfig) -> anyhow::Result<()> {
+    if cfg.max_workers == 0 {
+        anyhow::bail!("max_workers must be > 0");
+    }
+    if cfg.bind.parse::<std::net::SocketAddr>().is_err() {
+        anyhow::bail!("invalid bind address: {}", cfg.bind);
+    }
+    if cfg.quic.enabled && cfg.quic.bind.parse::<std::net::SocketAddr>().is_err() {
+        anyhow::bail!("invalid quic bind address: {}", cfg.quic.bind);
+    }
+    Ok(())
+}
+
+/// Load from optional TOML path + `NUSA_*` env overrides (`NUSA_*` wins over file).
+pub fn load_sources(config_path: Option<&str>) -> anyhow::Result<()> {
+    if let Some(path) = config_path
+        && Path::new(path).exists()
+    {
+        ensure_toml_file_valid(path)?;
+    }
+    let mut cfg: RuntimeConfig = build_figment(config_path).extract()?;
+    laravel::normalize_paths(&mut cfg);
+    validate_config(&cfg)?;
+    CONFIG.store(Arc::new(cfg));
+    Ok(())
+}
+
 /// Load configuration from a TOML file path.
 ///
-/// Merges file config with `NUSA_`-prefixed environment variables.
-/// Validates that `max_workers > 0`.
+/// Merges defaults → file → `NUSA_`-prefixed environment variables (env wins).
+/// Use [`load_sources`] when the file may be absent (container env-only).
 pub fn load(path: &str) -> anyhow::Result<()> {
     if !std::path::Path::new(path).exists() {
         return Err(anyhow::anyhow!("config file not found: {path}"));
     }
-
-    let cfg: RuntimeConfig = Figment::new()
-        .merge(Serialized::defaults(default_config()))
-        .merge(Toml::file(path))
-        .merge(Env::prefixed("nusa_"))
-        .extract()?;
-
-    if cfg.max_workers == 0 {
-        return Err(anyhow::anyhow!("max_workers must be > 0"));
-    }
-
-    if cfg.bind.parse::<std::net::SocketAddr>().is_err() {
-        return Err(anyhow::anyhow!("invalid bind address: {}", cfg.bind));
-    }
-
-    if cfg.quic.enabled && cfg.quic.bind.parse::<std::net::SocketAddr>().is_err() {
-        return Err(anyhow::anyhow!(
-            "invalid quic bind address: {}",
-            cfg.quic.bind
-        ));
-    }
-
-    CONFIG.store(Arc::new(cfg));
-    Ok(())
+    load_sources(Some(path))
 }
 
 /// Get the current active configuration.
@@ -212,7 +283,7 @@ pub fn get() -> Arc<RuntimeConfig> {
 /// Returns a JoinHandle so the caller can cancel on shutdown.
 pub fn watch(path: String) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
-        if !get().hot_reload {
+        if !get().hot_reload || path.is_empty() || !std::path::Path::new(&path).exists() {
             return;
         }
 
@@ -246,7 +317,7 @@ pub fn watch(path: String) -> tokio::task::JoinHandle<()> {
 
         // Keep watcher alive while listening for reload signals
         while let Some(()) = rx.recv().await {
-            if let Err(e) = load(&path) {
+            if let Err(e) = load_sources(Some(path.as_str())) {
                 tracing::error!(err = %e, "failed to reload config");
             } else {
                 tracing::info!("config reloaded successfully");

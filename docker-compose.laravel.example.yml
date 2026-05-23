@@ -1,0 +1,29 @@
+# Example: Laravel + Nusa (env-only — no nusa.toml in container)
+# Usage: copy to docker-compose.yml, set build context, run `docker compose up`
+
+services:
+  nusa:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./my-laravel-app:/app:ro
+      - nusa-tmp:/tmp/nusa
+    environment:
+      NUSA_CODE_DIR: /app
+      NUSA_TMP_DIR: /tmp/nusa
+      NUSA_OCTANE_WORKERS: "4"
+      NUSA_MAX_WORKERS: "16"
+      NUSA_BIND: "0.0.0.0:8080"
+      NUSA_HOT_RELOAD: "false"
+      RUST_LOG: info
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+volumes:
+  nusa-tmp:

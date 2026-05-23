@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::Router;
-use nusa_config::{EngineKind, RuntimeConfig};
+use nusa_config::{ConfigResolution, EngineKind, RuntimeConfig};
 use nusa_core::{
     BackpressureGuard, PhpEngine, ResourceGuard, TaskManager, TenantRateLimiter, TenantRegistry,
 };
@@ -306,6 +306,26 @@ fn spawn_dev_actions(watcher: DevWatcher, handles: ServerHandles) -> tokio::task
     })
 }
 
+/// Resolve TOML path (or env-only), load config, return path used for file watching.
+fn load_runtime_config(cli_config: &str) -> anyhow::Result<String> {
+    let resolution = nusa_config::resolve_config_path(cli_config)?;
+    let watch_path = match &resolution {
+        ConfigResolution::File(path) => {
+            let path_str = path.to_string_lossy();
+            nusa_config::load_sources(Some(path_str.as_ref()))?;
+            path_str.into_owned()
+        }
+        ConfigResolution::EnvOnly => {
+            tracing::info!(
+                "No nusa.toml found; using NUSA_* environment variables and Laravel defaults (code_dir=/app)"
+            );
+            nusa_config::load_sources(None)?;
+            String::new()
+        }
+    };
+    Ok(watch_path)
+}
+
 /// Start the gateway HTTP server.
 pub async fn start_server(
     config_path: &str,
@@ -331,8 +351,13 @@ pub async fn start_server(
         }
     };
 
-    nusa_config::load(&blue_path)?;
-    let _watcher = nusa_config::watch(blue_path.clone());
+    let watch_path = if matches!(mode, StartMode::Default) {
+        load_runtime_config(config_path)?
+    } else {
+        nusa_config::load(&blue_path)?;
+        blue_path.clone()
+    };
+    let _watcher = nusa_config::watch(watch_path);
 
     let components = build_components(prometheus_handle.clone()).await?;
     spawn_optional_services(&components);

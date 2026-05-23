@@ -26,8 +26,8 @@ fn config_precedence_defaults_only_all_defaults_applied() {
     assert_eq!(config.max_workers, 4);
     assert_eq!(config.timeout_ms, 30_000);
     assert_eq!(config.wasm_memory_mb, 256);
-    assert_eq!(config.vfs_root, "/app/public");
-    assert_eq!(config.code_dir, "/app/public");
+    assert_eq!(config.code_dir, "/app");
+    assert!(config.vfs_root.is_empty() || config.vfs_root == "/app/public");
     assert_eq!(config.tmp_dir, "/tmp/nusa");
     assert!(config.hot_reload);
     assert_eq!(config.octane_workers, 0);
@@ -97,16 +97,13 @@ timeout_ms = 30000
 
     let result = load(file_path.to_str().unwrap());
 
-    // Clean up env var
     unsafe {
         std::env::remove_var("NUSA_MAX_WORKERS");
     }
 
-    if result.is_ok() {
-        let config = get();
-        // figment with Env provider uses the prefix
-        assert_eq!(config.max_workers, 16, "env should override file");
-    }
+    assert!(result.is_ok(), "load should succeed: {result:?}");
+    let config = get();
+    assert_eq!(config.max_workers, 16, "env should override file");
 
     let _ = std::fs::remove_file(&file_path);
 }
