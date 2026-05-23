@@ -79,14 +79,14 @@ Full registry: `.cursor/skills/rust-test/SKILL.md` → **Nusa Test Sector Regist
 |----|------------------------|-------------------|
 | **S02** | **Done** — gateway dispatch/readiness, fake IPC pool, `init_octane_pool` fail-closed | Green `just podman-ci` on current branch |
 | **S14** | **Done** — six plugin test binaries (domain, security, exhaustive, stress) | Green `just podman-ci-fast` |
-| **S15** | **Mostly done** — fixture routes (GET/POST/query/counter), pool IPC, gateway→Laravel, leak suite | Green `just podman-ci` + `podman-ci-e2e`; optional session/middleware E2E rows below |
+| **S15** | **Done** — fixture routes (GET/POST/query/counter/session/middleware), pool IPC + response headers, gateway→Laravel, leak suite | Green `just podman-ci` + `podman-ci-e2e` |
 | S12 | Done (enforcement fail-closed) | Optional extra seccomp stress/decision combinatorics |
 
 ### Remaining gaps (test plan)
 
 | Gap | Owner / gate | Notes |
 |-----|--------------|-------|
-| S15 session/middleware E2E | P2+ / pre-GA | No dedicated test for Laravel session cookie round-trip or custom middleware stack; fixture uses `SESSION_DRIVER=array` |
+| S15 session/middleware E2E | **Addressed** | `laravel_session_cookie_round_trip_via_ipc_headers`, `laravel_custom_middleware_runs_on_worker_path` in `laravel_live.rs` |
 | `just podman-ci-e2e` green log | Release sign-off | Leak 10k + IPC bench must pass once on release hardware |
 | S16 `nusa-engine-ffi` | Manual | Excluded from default Podman workspace run |
 | S17 `nusa-cli` full suite | `podman-test-pkg cli` | Excluded from default Podman workspace run |

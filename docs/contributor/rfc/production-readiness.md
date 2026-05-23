@@ -59,8 +59,7 @@ Composer at runtime is conditional via `dockerfiles/podman-laravel-fixture.sh` (
 
 ### P2 optional (not blocking v0.1.0 code complete)
 
-- Laravel **session / custom middleware** E2E rows (tracked in testing.md under S15 gap)
-- Published IPC P99 and Normal Mode numbers (P3)
+- Published IPC P99 and Normal Mode wrk/k6 numbers (P3) — scripts in `tests/load/`
 
 ## Test sector tracking (S02 / S14 / S15)
 
@@ -74,8 +73,8 @@ Aligned with [`testing.md`](../testing.md).
 
 ## P3–P4 remaining work
 
-1. Run benchmarks; record in `docs/benchmarks/normal-mode-report.md` and `octane-ipc-report.md`
-2. Add `tests/load/` k6 script when promoting load tests to CI
+1. Run wrk/k6 on release hardware; record in `docs/benchmarks/normal-mode-report.md`
+2. Tag release per [`release-checklist.md`](../release-checklist.md) (`.github/workflows/release.yml` + SBOM)
 3. Flip `docs/public/production-status.md` to GA criteria when KPIs + gates are signed
 
 ## References

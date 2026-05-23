@@ -22,7 +22,7 @@ Rust owns spawn, recycle, and health. PHP owns Laravel inside the sandbox.
 php-driver/
 ├── composer.json              # name: nusa/octane
 ├── bin/
-│   └── nusa-octane-worker     # Worker entrypoint (replaces legacy octane-rust-worker)
+│   └── nusa-octane-worker     # Worker entrypoint
 ├── config/
 │   └── nusa-octane.php
 └── src/
@@ -31,7 +31,7 @@ php-driver/
     └── Commands/OctaneStartCommand.php
 ```
 
-**Naming (v0.1.0):** The worker binary is **`nusa-octane-worker`**. The service provider class is **`NusaOctaneServiceProvider`** in namespace **`Nusa\Octane`**. Older names (`octane-rust-worker`, `OctaneRustServiceProvider`, `NusaRs\OctaneDriver`) are removed.
+**Naming (v0.1.0):** Worker binary **`nusa-octane-worker`**; service provider **`Nusa\Octane\NusaOctaneServiceProvider`**.
 
 ---
 

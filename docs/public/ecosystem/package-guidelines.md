@@ -39,8 +39,6 @@ php-driver/
 | **`NusaOctaneServiceProvider`** | Registers Octane lifecycle listeners and publishes `nusa-octane` config |
 | **`nusa-octane-worker`** | Executable invoked by `WorkerPool` (see `pool.rs`) |
 
-Legacy names (`octane-rust-worker`, `OctaneRustServiceProvider`) are **not** part of the current tree.
-
 The worker is executed with:
 
 - **Application root** = `code_dir` from `nusa.toml`  

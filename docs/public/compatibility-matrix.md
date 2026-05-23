@@ -51,6 +51,14 @@ Honest support statement for GA. **Pilot today:** Alpine Linux musl, Laravel 11 
 
 Full ecosystem guidance: [ecosystem/package-guidelines.md](ecosystem/package-guidelines.md).
 
+## Nusa releases
+
+| Release | Rust / `nusa --version` | `nusa/octane` | Notes |
+|---------|-------------------------|---------------|-------|
+| Pre-GA | `0.1.0` | `0.1.0` (path) | Alpine `podman-ci` + E2E 14/14 |
+
+Add a row on each tagged release (`vX.Y.Z`).
+
 ## Verification commands
 
 ```bash

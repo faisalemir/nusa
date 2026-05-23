@@ -69,6 +69,26 @@ build-release:
 build-musl:
     cargo build --release --target x86_64-unknown-linux-musl
 
+# --- Versioning (SemVer) ---
+
+# Print workspace package version (from Cargo.toml)
+version:
+    cargo pkgid -p nusa-cli
+
+# Print `nusa --version` (builds CLI if needed)
+version-cli:
+    cargo run -p nusa-cli -- --version
+
+# Align php-driver/composer.json with [workspace.package].version
+sync-composer-version:
+    powershell.exe -ExecutionPolicy Bypass -File scripts/sync-composer-version.ps1
+
+# Bump workspace + composer.json: patch | minor | major (requires: cargo install cargo-edit)
+release-bump PART:
+    cargo set-version --workspace --bump {{PART}}
+    just sync-composer-version
+    @Write-Host "Next: rename CHANGELOG [Unreleased] -> new version, commit, tag v<version>, push tag"
+
 # --- Security ---
 
 # Audit dependencies for known vulnerabilities

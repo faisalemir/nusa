@@ -15,3 +15,16 @@ Route::get('/nusa-counter', static function () {
 
     return 'count:' . $n;
 });
+Route::get('/nusa-session-set', static function () {
+    session(['nusa_token' => 'fixture-session-ok']);
+
+    return response('session-set', 200);
+});
+Route::get('/nusa-session-get', static function () {
+    return 'session:' . session('nusa_token', 'missing');
+});
+Route::get('/nusa-middleware', static function () {
+    $flag = request()->attributes->get('nusa_fixture_middleware', '0');
+
+    return 'mw:' . $flag;
+});

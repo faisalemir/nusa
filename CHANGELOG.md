@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- CLI `nusa --version` and `just version` / `just release-bump` / `just sync-composer-version` for SemVer workflow
+- `version` field in `php-driver/composer.json` aligned with workspace package version
+
 #### Documentation (P0)
 - Greenfield docs: `docs/public/`, `docs/contributor/`, `docs/ai/`, `docs/README.md`
 - `AGENTS.md` entry point for AI agents
@@ -27,13 +30,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixture `tests/fixtures/laravel-minimal`, crate `nusa-e2e-tests`
 - `just podman-test-laravel`, `just podman-ci-e2e`, leak suite, IPC bench smoke
 - IPC `Response.body` accepts JSON string from PHP workers
+- S15: session cookie round-trip and `NusaFixtureProbe` middleware E2E (`laravel_live.rs`)
+
+#### P3–P4 gap closure (tooling)
+- Load scripts: `tests/load/normal-static.js`, `laravel-fixture.js`, `record-wrk.sh`
+- [`docs/contributor/release-checklist.md`](docs/contributor/release-checklist.md)
 
 ### Fixed
 - Seccomp exhaustive test no longer calls `apply_seccomp()` in the nextest runner (fixes `podman-ci` hang near end of suite)
 - PHP worker `normalizeIpcBody()` decodes Rust IPC JSON byte arrays so POST bodies reach Laravel (`laravel_post_echo_forwards_request_body`)
+- `WorkerPool::handle_http_request` forwards IPC response headers (e.g. `Set-Cookie`) to the gateway
+- SBOM artifact upload indentation in `.github/workflows/release.yml`
 
 ### Changed
-- PHP driver: worker binary renamed to **`nusa-octane-worker`**; Laravel integration via **`NusaOctaneServiceProvider`** (`nusa/octane` package); legacy `octane-rust-worker` / `OctaneRustServiceProvider` removed
+- PHP driver: worker binary **`nusa-octane-worker`**; Laravel integration via **`NusaOctaneServiceProvider`** (`nusa/octane` package)
 - `docs/public/production-status.md` and `docs/benchmarks/` updated with Alpine CI sign-off evidence (2026-05-23)
 - `README.md` and `AGENTS.md` aligned with Octane dispatch behavior
 - `config.toml.example` documents Octane keys and wasm dev-only policy

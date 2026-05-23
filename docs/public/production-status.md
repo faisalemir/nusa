@@ -15,7 +15,7 @@ This page is the contract between the Nusa team and everyone who deploys Laravel
 | Can I pilot in staging / internal platforms? | **Yes**, on Linux/Alpine; Octane path validated by `just podman-ci` + `just podman-ci-e2e` |
 | What proves quality? | **`just podman-ci`** (pre-merge) and **`just podman-ci-e2e`** (pre-GA) on Alpine musl—not host-only green runs |
 
-Nusa is **ahead of typical “0.1” projects** in systems design: kernel sandboxing, framed IPC, multi-tenant gateway controls, and thousands of tests. It is **behind GA** on a narrow set of integration wires (chiefly Octane HTTP → worker pool) and formal release KPIs.
+Nusa is **ahead of typical “0.1” projects** in systems design: kernel sandboxing, framed IPC, multi-tenant gateway controls, and thousands of tests. It is **behind GA** on formal benchmark tables (P3) and signed release artifacts (P4)—not on core Octane HTTP dispatch, which is wired and tested in Alpine CI.
 
 That combination is a strength, not a secret—we document it so you can plan migrations with confidence.
 
@@ -55,7 +55,7 @@ Landlock and seccomp are applied **before** the server binds. CI on Alpine musl 
 - **State reset** events on RequestReceived / RequestTerminated
 - **PHP driver** (`nusa/octane`, `NusaOctaneServiceProvider`, `nusa-octane-worker`) + Laravel minimal fixture E2E (`just podman-test-laravel`)
 
-**Alpine verification (2026-05-23, working tree):** `just podman-ci-fast` 1620/1620, `just podman-ci` workspace + Laravel E2E 12/12, `just podman-ci-e2e` + leak 10k + IPC bench smoke green.
+**Alpine verification (2026-05-23, working tree):** `just podman-ci-fast` 1620/1620, `just podman-ci` workspace + Laravel E2E **14/14**, `just podman-ci-e2e` + leak 10k + IPC bench smoke green.
 
 Remaining for GA: Normal Mode vs FPM wrk/k6 tables ([`docs/benchmarks/normal-mode-report.md`](../benchmarks/normal-mode-report.md)), signed release / SBOM (P4).
 
@@ -77,7 +77,8 @@ The project maintains a **large, categorized test suite**—security, concurrenc
 | G2 | `/ready` when Octane pool required but unhealthy | **Addressed** — `/ready` checks `pool.is_ready()` | — |
 | G3 | CLI startup when `octane_workers > 0` | **Addressed** — process exits if init or ready fails | — |
 | G4 | Laravel fixture E2E in Alpine CI | **Addressed** — `tests/fixtures/laravel-minimal`, `nusa-e2e-tests`, `just podman-test-laravel` | — |
-| G5 | Normal Mode latency KPIs and signed release process | IPC framing smoke + 10k leak in `podman-ci-e2e`; FPM comparison + release artifacts still **P3–P4** | **P3–P4** |
+| G5 | Normal Mode latency KPIs and signed release process | Load scripts in `tests/load/`; release checklist + fixed SBOM workflow; **wrk/k6 numbers + tag** still **P3–P4** | **P3–P4** |
+| G5b | Session / middleware Laravel E2E | **Addressed** — fixture routes + pool forwards IPC response headers | — |
 | G6 | Blueprint “Phase 6” advanced features | Post-GA innovation track | **P5** |
 
 We do not hide these behind optimistic README tables. [Migration](migration.md) and [Operations](operations/runbook.md) repeat the Octane caveat where it affects your runbooks.

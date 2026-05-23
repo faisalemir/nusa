@@ -17,9 +17,13 @@ pub mod test;
 
 use clap::{Parser, Subcommand};
 
+/// Workspace release version (`[workspace.package].version` in root `Cargo.toml`).
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 #[derive(Parser)]
 #[command(
     name = "nusa",
+    version = VERSION,
     about = "Nusa PHP Runtime — Rust-orchestrated PHP runtime for Laravel"
 )]
 pub struct Cli {

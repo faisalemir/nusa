@@ -27,6 +27,22 @@ use crate::error::WorkerError;
 use nusa_ipc::protocol::IpcMessage;
 use nusa_ipc::transport::IpcTransport;
 
+/// Map IPC response headers into `http::HeaderMap` for gateway clients.
+fn ipc_headers_to_http(headers: &HashMap<String, Vec<String>>) -> http::HeaderMap {
+    let mut map = http::HeaderMap::new();
+    for (name, values) in headers {
+        let Ok(header_name) = http::HeaderName::from_bytes(name.as_bytes()) else {
+            continue;
+        };
+        for value in values {
+            if let Ok(header_value) = http::HeaderValue::from_str(value) {
+                map.append(header_name.clone(), header_value);
+            }
+        }
+    }
+    map
+}
+
 /// Max time to wait for the PHP worker to create its Unix socket (production startup SLA).
 #[cfg(unix)]
 const WORKER_SOCKET_WAIT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -486,11 +502,16 @@ impl WorkerPool {
         self.return_worker(worker_id);
 
         match result {
-            Ok(IpcMessage::Response { status, body, .. }) => {
+            Ok(IpcMessage::Response {
+                status,
+                headers,
+                body,
+                ..
+            }) => {
                 self.total_handled.fetch_add(1, Ordering::SeqCst);
                 Ok(PhpResponse {
                     status,
-                    headers: http::HeaderMap::new(),
+                    headers: ipc_headers_to_http(&headers),
                     body: Bytes::from(body),
                 })
             }
@@ -643,5 +664,23 @@ impl WorkerPool {
     #[doc(hidden)]
     pub fn enqueue_idle_worker(&mut self, worker_id: usize) {
         self.idle_queue.push(worker_id);
+    }
+}
+
+#[cfg(test)]
+mod ipc_header_tests {
+    use std::collections::HashMap;
+
+    use super::ipc_headers_to_http;
+
+    #[test]
+    fn ipc_headers_to_http_maps_set_cookie() {
+        let mut ipc = HashMap::new();
+        ipc.insert(
+            "set-cookie".to_string(),
+            vec!["nusa_session=test; Path=/".to_string()],
+        );
+        let http = ipc_headers_to_http(&ipc);
+        assert!(http.contains_key(http::header::SET_COOKIE));
     }
 }

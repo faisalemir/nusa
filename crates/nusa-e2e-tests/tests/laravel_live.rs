@@ -12,11 +12,38 @@ use std::sync::Arc;
 #[cfg(unix)]
 use std::time::Duration;
 
+#[cfg(unix)]
+use http::header::SET_COOKIE;
+#[cfg(unix)]
+use nusa_core::PhpResponse;
 use nusa_e2e_tests::laravel_fixture_root;
 #[cfg(unix)]
 use nusa_e2e_tests::{fixture_ready, require_laravel_fixture};
 #[cfg(unix)]
 use nusa_octane_worker::pool::WorkerPool;
+
+/// First `Set-Cookie` value from a PHP response (session tests).
+#[cfg(unix)]
+fn first_set_cookie_header(response: &PhpResponse) -> Option<String> {
+    response
+        .headers
+        .get_all(SET_COOKIE)
+        .iter()
+        .next()
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_string)
+}
+
+/// Cookie request header from a `Set-Cookie` response line (`name=value; ...` → `name=value`).
+#[cfg(unix)]
+fn cookie_header_from_set_cookie(set_cookie: &str) -> String {
+    set_cookie
+        .split(';')
+        .next()
+        .unwrap_or(set_cookie)
+        .trim()
+        .to_string()
+}
 
 #[test]
 fn laravel_fixture_contract_non_unix() {
@@ -327,6 +354,80 @@ async fn laravel_counter_shows_worker_persistence_between_requests() {
     assert!(
         b2.contains("count:2"),
         "same worker must increment static counter (state isolation is separate): {b2}"
+    );
+
+    pool.shutdown().await.ok();
+}
+
+#[tokio::test]
+#[cfg(unix)]
+async fn laravel_session_cookie_round_trip_via_ipc_headers() {
+    let root = require_laravel_fixture();
+    let mut pool = WorkerPool::new(1, root, 512, 500);
+    pool.initialize().await.expect("initialize");
+
+    let set_res = pool
+        .handle_http_request(
+            "GET".into(),
+            "/nusa-session-set".into(),
+            HashMap::new(),
+            None,
+            30_000,
+        )
+        .await
+        .expect("session set");
+    assert_eq!(set_res.status, 200);
+
+    let set_cookie = first_set_cookie_header(&set_res)
+        .expect("session set must return Set-Cookie for array session driver");
+    let cookie_value = cookie_header_from_set_cookie(&set_cookie);
+
+    let mut headers = HashMap::new();
+    headers.insert("Cookie".into(), vec![cookie_value]);
+
+    let get_res = pool
+        .handle_http_request(
+            "GET".into(),
+            "/nusa-session-get".into(),
+            headers,
+            None,
+            30_000,
+        )
+        .await
+        .expect("session get");
+
+    assert_eq!(get_res.status, 200);
+    let body = String::from_utf8_lossy(&get_res.body);
+    assert!(
+        body.contains("session:fixture-session-ok"),
+        "session value must round-trip via Cookie header, got: {body}"
+    );
+
+    pool.shutdown().await.ok();
+}
+
+#[tokio::test]
+#[cfg(unix)]
+async fn laravel_custom_middleware_runs_on_worker_path() {
+    let root = require_laravel_fixture();
+    let mut pool = WorkerPool::new(1, root, 512, 500);
+    pool.initialize().await.expect("initialize");
+
+    let response = pool
+        .handle_http_request(
+            "GET".into(),
+            "/nusa-middleware".into(),
+            HashMap::new(),
+            None,
+            30_000,
+        )
+        .await
+        .expect("middleware route");
+
+    assert_eq!(response.status, 200);
+    assert!(
+        String::from_utf8_lossy(&response.body).contains("mw:1"),
+        "NusaFixtureProbe middleware must run in worker HTTP stack"
     );
 
     pool.shutdown().await.ok();

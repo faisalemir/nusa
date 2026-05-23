@@ -1,5 +1,6 @@
 {
     "name": "nusa/octane",
+    "version": "0.1.0",
     "description": "Nusa PHP Runtime driver for Laravel Octane — high-performance, Rust-orchestrated PHP runtime.",
     "type": "library",
     "license": "MIT",

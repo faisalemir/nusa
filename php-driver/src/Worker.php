@@ -131,7 +131,12 @@ class Worker
             }
         }
 
-        $laravelRequest = Request::create($uri, $method, [], [], [], $_SERVER, $body);
+        $cookies = $request['cookies'] ?? [];
+        if (!is_array($cookies)) {
+            $cookies = [];
+        }
+
+        $laravelRequest = Request::create($uri, $method, [], $cookies, [], $_SERVER, $body);
 
         // Handle the request through the kernel
         $symfonyResponse = $this->kernel->handle($laravelRequest);

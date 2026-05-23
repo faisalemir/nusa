@@ -69,7 +69,7 @@ The **worker pool, IPC stack, and gateway HTTP dispatch** are wired in v0.1.0 wh
 
 - Validate on **Alpine musl** (`just podman-ci` / `just podman-ci-e2e`) before production traffic  
 - Use [Production status](production-status.md) for benchmark and release KPIs  
-- Install **`nusa/octane`** with binary **`nusa-octane-worker`** (not legacy `octane-rust-worker`)
+- Install **`nusa/octane`** with binary **`nusa-octane-worker`**
 
 ---
 
@@ -80,8 +80,6 @@ The bridge from Rust orchestration to Laravel bootstrap is the **`nusa/octane`**
 1. Add a path or VCS repository to `php-driver/` (see [ecosystem/package-guidelines.md](ecosystem/package-guidelines.md)).  
 2. Require **`nusa/octane`** in your Laravel app (`NusaOctaneServiceProvider` auto-discovers).  
 3. Point Octane / the pool at **`nusa-octane-worker`** (`bin/nusa-octane-worker` or `vendor/bin/nusa-octane-worker`).  
-
-Legacy worker names (`octane-rust-worker`, `OctaneRustServiceProvider`) are removed—use the names above.  
 
 The worker expects a real Laravel tree: `vendor/`, `bootstrap/app.php`, Octane-compatible boot.
 
