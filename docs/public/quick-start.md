@@ -8,7 +8,7 @@ Get a Laravel app answering HTTP through Nusa in about **10 minutes** on Linux o
 
 | Requirement | Version / notes |
 |-------------|-----------------|
-| **PHP** | 8.2+ (8.4 recommended; matches CI image) |
+| **PHP** | 8.5+ (8.5.6 in CI; matches Alpine `php85` image) |
 | **Composer** | 2.x |
 | **Rust** | 1.95+ ([`rust-toolchain.toml`](../../rust-toolchain.toml)) |
 | **Laravel app** | Existing project or new app |

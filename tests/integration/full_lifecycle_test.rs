@@ -71,11 +71,11 @@ fn build_test_app(engine: Arc<dyn PhpEngine>) -> Router {
         Arc::new(NusaMetrics::init()),
         prometheus_handle.clone(),
         Arc::new(Mutex::new(None)),
-        Arc::new(Mutex::new({
+        {
             let mut r = StateResetOrchestrator::new(128);
             r.initialize();
-            r
-        })),
+            Arc::new(r)
+        },
     )
 }
 
@@ -240,11 +240,11 @@ async fn lifecycle_request_timeout_client_disconnect() {
         Arc::new(NusaMetrics::init()),
         prometheus_handle.clone(),
         Arc::new(Mutex::new(None)),
-        Arc::new(Mutex::new({
+        {
             let mut r = StateResetOrchestrator::new(128);
             r.initialize();
-            r
-        })),
+            Arc::new(r)
+        },
     );
 
     let request = Request::builder()

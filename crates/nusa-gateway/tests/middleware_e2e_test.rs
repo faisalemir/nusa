@@ -8,7 +8,6 @@ use std::time::Duration;
 use async_trait::async_trait;
 use axum::{Router, body::Body, http::Request, http::StatusCode};
 use bytes::Bytes;
-use parking_lot::Mutex;
 use tower::ServiceExt;
 
 use nusa_core::{
@@ -68,11 +67,11 @@ fn build_test_app(engine: Arc<dyn PhpEngine>) -> Router {
         Arc::new(NusaMetrics::init()),
         prometheus_handle.clone(),
         Arc::new(tokio::sync::Mutex::new(None)),
-        Arc::new(Mutex::new({
+        Arc::new({
             let mut r = StateResetOrchestrator::new(128);
             r.initialize();
             r
-        })),
+        }),
     )
 }
 

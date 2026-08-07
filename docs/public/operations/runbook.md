@@ -15,7 +15,8 @@ Adjust commands for your orchestrator (Kubernetes, Nomad, Docker Compose, system
 | Process | `nusa` (`nusa-cli` crate) |
 | Config | `nusa.toml` or `--config /path/to/nusa.toml` |
 | Production target image | Alpine Linux **musl** (`dockerfiles/nusa-test-runner.Dockerfile`) |
-| Primary PHP path today | `engine = "child"`, `octane_workers = 0` |
+| Primary PHP path (production) | `octane_workers > 0`, `octane_backend = ipc` or `embed` |
+| Debug / migration | `octane_workers = 0`, `engine = child` (fork per request) |
 
 One process exposes HTTP, metrics, health, WebSocket/SSE, and task APIs—reducing moving parts during incidents.
 
@@ -36,7 +37,7 @@ Load balancer
 │  • Prometheus /metrics          │
 └──────────────┬──────────────────┘
                ▼
-        PHP engine (Normal)  OR  Worker pool (Octane + IPC)
+        LaravelHttpRuntime (Octane ipc/embed)  OR  PhpEngine (Normal)
 ```
 
 Readiness reflects **gateway health** and, when `octane_workers > 0`, **worker pool** `is_ready()`.
@@ -52,7 +53,9 @@ Readiness reflects **gateway health** and, when `octane_workers > 0`, **worker p
 
 ### Readiness with Octane (v0.1.0)
 
-When `octane_workers > 0`, **`GET /ready`** returns **503** unless both gateway health is ready **and** `WorkerPool::is_ready()` is true. CLI startup **exits** if the pool cannot initialize.
+When `octane_workers > 0`, **`GET /ready`** returns **503** unless both gateway health is ready **and** `LaravelHttpRuntime::is_ready()` is true (IPC or embed pool). CLI startup **exits** if the pool cannot initialize.
+
+**CI gates:** `just podman-ci` (IPC + workspace) · `just podman-ci-embed` (embed pool + `laravel_embed_pool_ping`).
 
 - Treat pool init errors at startup as **severity 1**  
 - Worker binary: **`nusa-octane-worker`** from package **`nusa/octane`** (`php-driver/`)  

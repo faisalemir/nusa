@@ -9,9 +9,9 @@ use std::time::Duration;
 use async_trait::async_trait;
 use axum::{Router, body::Body, http::Request, http::StatusCode};
 use bytes::Bytes;
-use parking_lot::Mutex;
 use tower::ServiceExt;
 
+use http::Method;
 use nusa_core::{
     BackpressureGuard, PhpEngine, PhpResponse, RequestContext, ResourceGuard, TaskManager,
     TenantRateLimiter, TenantRegistry,
@@ -68,11 +68,11 @@ fn build_test_app(engine: Arc<dyn PhpEngine>) -> Router {
         Arc::new(NusaMetrics::init()),
         prometheus_handle.clone(),
         Arc::new(tokio::sync::Mutex::new(None)),
-        Arc::new(Mutex::new({
+        Arc::new({
             let mut r = StateResetOrchestrator::new(128);
             r.initialize();
             r
-        })),
+        }),
     )
 }
 
@@ -114,7 +114,7 @@ async fn static_file_exists_served_with_correct_content_type() {
     std::fs::write(&file_path, "body { color: red; }").expect("write file");
 
     let handler = StaticFileHandler::new(dir.clone());
-    let response = handler.serve("test.css").await;
+    let response = handler.serve("test.css", &Method::GET, None).await;
     assert!(response.is_some());
     let resp = response.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
@@ -135,7 +135,7 @@ async fn static_file_not_found_returns_404() {
     let dir = temp_public_dir();
     let handler = StaticFileHandler::new(dir.clone());
 
-    let response = handler.serve("nonexistent.css").await;
+    let response = handler.serve("nonexistent.css", &Method::GET, None).await;
     assert!(response.is_none());
 
     cleanup(&dir);
@@ -149,7 +149,7 @@ async fn static_directory_listing_disabled() {
     std::fs::create_dir_all(dir.join("subdir")).expect("create subdir");
 
     let handler = StaticFileHandler::new(dir.clone());
-    let response = handler.serve("subdir").await;
+    let response = handler.serve("subdir", &Method::GET, None).await;
     // Directory should not be served
     assert!(response.is_none());
 
@@ -197,20 +197,81 @@ fn static_file_if_modified_since_304_for_unchanged() {
     assert!(StaticFileHandler::is_static("image.png"));
 }
 
-// ── Gzip Compression ──
+// ── Precompressed assets (P4-E) ──
 
-#[test]
-fn static_file_gzip_served_when_client_accepts() {
-    // Compression handled by tower_http::compression::CompressionLayer
-    assert!(StaticFileHandler::is_static("app.js"));
+#[tokio::test]
+async fn static_file_serves_br_when_accepted() {
+    let dir = temp_public_dir();
+    std::fs::write(dir.join("app.js"), "uncompressed").expect("write");
+    std::fs::write(dir.join("app.js.br"), "br-bytes").expect("write br");
+
+    let handler = StaticFileHandler::new(dir.clone());
+    let response = handler
+        .serve("app.js", &Method::GET, Some("br"))
+        .await
+        .expect("response");
+    assert_eq!(
+        response
+            .headers()
+            .get(http::header::CONTENT_ENCODING)
+            .and_then(|v| v.to_str().ok()),
+        Some("br")
+    );
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body");
+    assert_eq!(&body[..], b"br-bytes");
+
+    cleanup(&dir);
 }
 
-// ── Brotli Compression ──
+#[tokio::test]
+async fn static_file_serves_gzip_when_accepted() {
+    let dir = temp_public_dir();
+    std::fs::write(dir.join("style.css"), "plain").expect("write");
+    std::fs::write(dir.join("style.css.gz"), "gz-bytes").expect("write gz");
 
-#[test]
-fn static_file_brotli_served_when_client_accepts() {
-    // Brotli compression handled by tower_http::compression::CompressionLayer
-    assert!(StaticFileHandler::is_static("style.css"));
+    let handler = StaticFileHandler::new(dir.clone());
+    let response = handler
+        .serve("style.css", &Method::GET, Some("gzip"))
+        .await
+        .expect("response");
+    assert_eq!(
+        response
+            .headers()
+            .get(http::header::CONTENT_ENCODING)
+            .and_then(|v| v.to_str().ok()),
+        Some("gzip")
+    );
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body");
+    assert_eq!(&body[..], b"gz-bytes");
+
+    cleanup(&dir);
+}
+
+#[tokio::test]
+async fn static_file_prefers_br_over_gzip() {
+    let dir = temp_public_dir();
+    std::fs::write(dir.join("app.css"), "plain").expect("write");
+    std::fs::write(dir.join("app.css.br"), "br").expect("write br");
+    std::fs::write(dir.join("app.css.gz"), "gz").expect("write gz");
+
+    let handler = StaticFileHandler::new(dir.clone());
+    let response = handler
+        .serve("app.css", &Method::GET, Some("gzip, br"))
+        .await
+        .expect("response");
+    assert_eq!(
+        response
+            .headers()
+            .get(http::header::CONTENT_ENCODING)
+            .and_then(|v| v.to_str().ok()),
+        Some("br")
+    );
+
+    cleanup(&dir);
 }
 
 // ── Cache-Control ──
@@ -222,7 +283,7 @@ async fn static_file_cache_control_headers_set() {
     std::fs::write(&file_path, "body {}").expect("write file");
 
     let handler = StaticFileHandler::new(dir.clone());
-    let response = handler.serve("app.css").await;
+    let response = handler.serve("app.css", &Method::GET, None).await;
     assert!(response.is_some());
 
     let resp = response.unwrap();
@@ -243,7 +304,7 @@ async fn static_file_cache_control_immutable_for_hashed() {
     std::fs::write(&file_path, "body {}").expect("write file");
 
     let handler = StaticFileHandler::new(dir.clone());
-    let response = handler.serve("app.abc123.css").await;
+    let response = handler.serve("app.abc123.css", &Method::GET, None).await;
     assert!(response.is_some());
 
     let resp = response.unwrap();
@@ -278,7 +339,7 @@ async fn static_file_large_file_streaming_no_memory_spike() {
     std::fs::write(&file_path, &large_content).expect("write large file");
 
     let handler = StaticFileHandler::new(dir.clone());
-    let response = handler.serve("large.txt").await;
+    let response = handler.serve("large.txt", &Method::GET, None).await;
     assert!(response.is_some());
     // Large file should not be cached (>1MB threshold)
 
@@ -307,7 +368,7 @@ async fn static_file_symlink_followed_or_blocked() {
     }
 
     let handler = StaticFileHandler::new(dir.clone());
-    let response = handler.serve("link.txt").await;
+    let response = handler.serve("link.txt", &Method::GET, None).await;
     // Symlink should be followed (content served)
     assert!(response.is_some());
 
@@ -360,7 +421,7 @@ async fn static_file_content_type_correct_for_various_extensions() {
 
     for (filename, expected_ct) in test_cases {
         std::fs::write(dir.join(filename), "content").expect("write file");
-        let response = handler.serve(filename).await;
+        let response = handler.serve(filename, &Method::GET, None).await;
         assert!(response.is_some(), "should serve {}", filename);
         let resp = response.unwrap();
         let ct = resp
@@ -399,7 +460,7 @@ async fn static_file_path_traversal_blocked() {
     let dir = temp_public_dir();
     let handler = StaticFileHandler::new(dir.clone());
 
-    let response = handler.serve("../../etc/passwd").await;
+    let response = handler.serve("../../etc/passwd", &Method::GET, None).await;
     assert!(response.is_none(), "path traversal should be blocked");
 
     cleanup(&dir);
@@ -416,11 +477,11 @@ async fn static_file_cache_hit_serves_from_cache() {
     let handler = StaticFileHandler::new(dir.clone());
 
     // First request — cache miss
-    let response1 = handler.serve("cached.css").await;
+    let response1 = handler.serve("cached.css", &Method::GET, None).await;
     assert!(response1.is_some());
 
     // Second request — cache hit
-    let response2 = handler.serve("cached.css").await;
+    let response2 = handler.serve("cached.css", &Method::GET, None).await;
     assert!(response2.is_some());
 
     cleanup(&dir);
@@ -440,7 +501,7 @@ async fn static_file_concurrent_access_no_corruption() {
     for _ in 0..10 {
         let h = handler.clone();
         handles.push(tokio::spawn(async move {
-            let response = h.serve("concurrent.css").await;
+            let response = h.serve("concurrent.css", &Method::GET, None).await;
             response.is_some()
         }));
     }
@@ -451,6 +512,53 @@ async fn static_file_concurrent_access_no_corruption() {
             "all concurrent requests should succeed"
         );
     }
+
+    cleanup(&dir);
+}
+
+#[tokio::test]
+async fn static_file_head_returns_no_body_with_content_length() {
+    let dir = temp_public_dir();
+    std::fs::write(dir.join("head.css"), "body { }").expect("write file");
+
+    let handler = StaticFileHandler::new(dir.clone());
+    let response = handler
+        .serve("head.css", &Method::HEAD, None)
+        .await
+        .expect("head");
+    assert_eq!(response.status(), 200);
+    assert_eq!(
+        response
+            .headers()
+            .get(http::header::CONTENT_LENGTH)
+            .and_then(|v| v.to_str().ok()),
+        Some("8")
+    );
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body");
+    assert!(body.is_empty());
+
+    cleanup(&dir);
+}
+
+#[tokio::test]
+async fn static_file_sets_tier_s1_header() {
+    let dir = temp_public_dir();
+    std::fs::write(dir.join("tier.css"), "x").expect("write file");
+
+    let handler = StaticFileHandler::new(dir.clone());
+    let response = handler
+        .serve("tier.css", &Method::GET, None)
+        .await
+        .expect("get");
+    assert_eq!(
+        response
+            .headers()
+            .get("x-nusa-tier")
+            .and_then(|v| v.to_str().ok()),
+        Some("S1")
+    );
 
     cleanup(&dir);
 }

@@ -3,7 +3,16 @@
 # Skips `composer install` when vendor/ is already valid (image bake or prior run).
 set -eu
 
-ln -sfn /usr/bin/php85 /usr/bin/php
+# Detect PHP binary (php85, php84, or php)
+if [ -x /usr/bin/php85 ]; then
+    PHP_BIN=/usr/bin/php85
+elif [ -x /usr/bin/php84 ]; then
+    PHP_BIN=/usr/bin/php84
+else
+    PHP_BIN=php
+fi
+ln -sfn "$PHP_BIN" /usr/bin/php
+
 cd /src/tests/fixtures/laravel-minimal
 ln -sfn /src/php-driver ./php-driver
 cp -f .env.example .env
@@ -38,5 +47,10 @@ test -f vendor/nusa/octane/src/Worker.php
 test -f php-driver/bin/nusa-octane-worker
 
 if [ -x /src/dockerfiles/warm-php-opcache.sh ]; then
-    NUSA_LARAVEL_FIXTURE=/src/tests/fixtures/laravel-minimal /src/dockerfiles/warm-php-opcache.sh
+    # Only warm opcache if PHP version matches fixture requirements
+    if php -r 'exit(version_compare(PHP_VERSION, "8.5.0", ">=") ? 0 : 1);' 2>/dev/null; then
+        NUSA_LARAVEL_FIXTURE=/src/tests/fixtures/laravel-minimal /src/dockerfiles/warm-php-opcache.sh
+    else
+        echo "warm-php-opcache: skip (PHP $(php -r 'echo PHP_VERSION;') < 8.5)"
+    fi
 fi

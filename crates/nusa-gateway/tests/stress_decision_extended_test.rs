@@ -16,7 +16,6 @@ use axum::{
 };
 use bytes::Bytes;
 use http::header::CONTENT_LENGTH;
-use parking_lot::Mutex;
 use tokio::sync::Barrier;
 use tower::ServiceExt;
 
@@ -96,11 +95,11 @@ fn build_test_app(engine: Arc<dyn PhpEngine>) -> Router {
         Arc::new(NusaMetrics::init()),
         prometheus(),
         Arc::new(tokio::sync::Mutex::new(None)),
-        Arc::new(Mutex::new({
+        Arc::new({
             let mut r = StateResetOrchestrator::new(128);
             r.initialize();
             r
-        })),
+        }),
     )
 }
 

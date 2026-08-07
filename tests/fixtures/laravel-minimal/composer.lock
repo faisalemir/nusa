@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "2ad95798c76ad1d2eb1f34d03b78ba9b",
+    "content-hash": "28e5129961d1fc2b8aa678a23a16a0b0",
     "packages": [
         {
             "name": "brick/math",
@@ -2580,17 +2580,18 @@
         },
         {
             "name": "nusa/octane",
-            "version": "dev-dev",
+            "version": "0.1.0",
             "dist": {
                 "type": "path",
                 "url": "../../../php-driver",
-                "reference": "64ef5e6e507e334f0510b5a9977eff7750700bde"
+                "reference": "4d1e59e1e49cc1d21ed9bbc198069cd5fd50e8ce"
             },
             "require": {
+                "illuminate/database": "^10.0|^11.0",
                 "illuminate/http": "^10.0|^11.0",
                 "illuminate/support": "^10.0|^11.0",
                 "laravel/octane": "^2.0",
-                "php": "^8.2"
+                "php": "^8.5"
             },
             "bin": [
                 "bin/nusa-octane-worker"
@@ -6038,8 +6039,11 @@
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {
-        "php": "^8.2"
+        "php": "^8.5"
     },
     "platform-dev": {},
+    "platform-overrides": {
+        "php": "8.5.6"
+    },
     "plugin-api-version": "2.9.0"
 }

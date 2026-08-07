@@ -10,4 +10,8 @@ docs/plan/
 skills-lock.json
 *.pdb
 *.plan.md
-dockerfiles/
+dockerfiles/nusa-test-runner.Dockerfile
+dockerfiles/podman-laravel-fixture.sh
+tests/fixtures/laravel-minimal/vendor/
+tests/fixtures/laravel-minimal/storage/
+tests/fixtures/laravel-minimal/bootstrap/cache/

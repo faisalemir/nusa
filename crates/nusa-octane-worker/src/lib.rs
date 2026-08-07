@@ -11,6 +11,7 @@
 #![allow(missing_docs)]
 
 pub mod error;
+pub mod laravel_runtime_impl;
 pub mod metrics;
 pub mod pool;
 pub mod state_reset;

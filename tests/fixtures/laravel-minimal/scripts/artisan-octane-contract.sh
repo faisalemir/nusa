@@ -6,7 +6,9 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 PHP="${PHP:-php}"
-if command -v php84 >/dev/null 2>&1; then
+if command -v php85 >/dev/null 2>&1; then
+  PHP=php85
+elif command -v php84 >/dev/null 2>&1; then
   PHP=php84
 fi
 

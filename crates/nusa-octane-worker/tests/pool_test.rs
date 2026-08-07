@@ -431,6 +431,22 @@ async fn worker_request_timeout_behavior() {
 }
 
 #[tokio::test]
+async fn pool_recycle_swaps_warm_standby_without_blocking_spawn() {
+    let mut pool = WorkerPool::with_standby(1, 1, test_app_root(), 512, 1000);
+    pool.initialize_test_stubs();
+    assert_eq!(pool.standby_len(), 1);
+
+    pool.recycle_worker(0).await.unwrap();
+
+    assert_eq!(
+        pool.standby_len(),
+        1,
+        "standby must be replenished async/sync"
+    );
+    assert_eq!(pool.idle_count(), 1);
+}
+
+#[tokio::test]
 async fn pool_recycle_preserves_worker_id() {
     let mut pool = WorkerPool::new(2, test_app_root(), 512, 1000);
 

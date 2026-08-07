@@ -1,0 +1,10 @@
+# Alpine wrk smoke — Octane embed backend (stdio daemon)
+engine = "child"
+octane_workers = 4
+octane_backend = "embed"
+max_workers = 128
+timeout_ms = 30000
+code_dir = "/src/tests/fixtures/laravel-minimal"
+bind = "127.0.0.1:18082"
+hot_reload = false
+php_binary = "php"

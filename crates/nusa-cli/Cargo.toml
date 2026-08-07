@@ -23,6 +23,7 @@ nusa-config = { path = "../nusa-config" }
 nusa-telemetry = { path = "../nusa-telemetry" }
 metrics-exporter-prometheus.workspace = true
 nusa-octane-worker = { path = "../nusa-octane-worker" }
+nusa-engine-embed = { path = "../nusa-engine-embed" }
 tokio.workspace = true
 anyhow.workspace = true
 clap.workspace = true

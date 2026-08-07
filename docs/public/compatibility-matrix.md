@@ -1,6 +1,6 @@
 # Compatibility matrix (v1.0 target)
 
-Honest support statement for GA. **Pilot today:** Alpine Linux musl, Laravel 11 minimal fixture, PHP 8.4 in CI image.
+Honest support statement for GA. **Pilot today:** Alpine Linux musl, Laravel 11 minimal fixture, PHP 8.5 in CI image.
 
 ## Platform
 
@@ -15,9 +15,8 @@ Honest support statement for GA. **Pilot today:** Alpine Linux musl, Laravel 11 
 
 | Version | Normal (`engine=child`) | Octane (`octane_workers>0`) |
 |---------|-------------------------|-----------------------------|
-| 8.4.x | CI image (`php84`) | CI fixture + E2E |
-| 8.3.x | Best-effort | Best-effort |
-| 8.2.x | Declared in driver `composer.json` | Requires validation |
+| 8.5.x | CI image (`php85`) | CI fixture + E2E; URI extension, persistent cURL share |
+| 8.4.x | Host dev | Best-effort (not CI-pinned) |
 
 ## Laravel
 

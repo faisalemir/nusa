@@ -19,6 +19,8 @@ use parking_lot::Mutex;
 pub trait Plugin: Send + Sync + 'static {
     fn name(&self) -> &'static str;
 
+    /// Runs before PHP/Octane. Set [`RequestContext::set_short_circuit`] (Tier-S2) to
+    /// return a full HTTP response without invoking the engine.
     async fn pre_exec(&self, _ctx: &mut RequestContext) -> Result<()> {
         Ok(())
     }

@@ -45,21 +45,39 @@ pub struct RuntimeConfig {
     /// Enable hot-reload on config file changes.
     pub hot_reload: bool,
     /// Number of Octane PHP workers (0 = disabled, > 0 = Octane mode).
-    #[serde(default)]
+    #[serde(default = "default_octane_workers")]
     pub octane_workers: usize,
+    /// Octane worker transport: `ipc` (PHP subprocess + UDS) or `embed` (in-process / stdio daemon).
+    #[serde(default)]
+    pub octane_backend: OctaneBackend,
     /// Octane worker max memory in MB before recycling.
     #[serde(default = "default_max_memory_mb")]
     pub octane_max_memory_mb: u64,
     /// Octane worker max requests before recycling.
     #[serde(default = "default_max_requests")]
     pub octane_max_requests: u64,
+    /// Warm standby workers (pre-bootstrapped; swapped in on recycle to cut P99 spikes).
+    #[serde(default)]
+    pub octane_standby_workers: usize,
     /// HTTP listen address (e.g. `0.0.0.0:8080`).
     #[serde(default = "default_bind")]
     pub bind: String,
     /// Static file document root; when empty, uses `{code_dir}/public`.
     #[serde(default)]
     pub static_root: String,
-    /// PHP binary for `engine = "child"` (e.g. `php` or `php84` on Alpine).
+    /// `Cache-Control: max-age` for non-hashed static assets (seconds).
+    #[serde(default = "default_static_cache_max_age_secs")]
+    pub static_cache_max_age_secs: u64,
+    /// `Cache-Control: max-age` for hash-named assets (`immutable`).
+    #[serde(default = "default_static_cache_immutable_max_age_secs")]
+    pub static_cache_immutable_max_age_secs: u64,
+    /// Tier-S1 moka LRU max entries for static file bodies (&lt;1 MiB).
+    #[serde(default = "default_static_cache_max_entries")]
+    pub static_cache_max_entries: u64,
+    /// Tier-S1 moka TTL for cached static bodies (seconds).
+    #[serde(default = "default_static_cache_ttl_secs")]
+    pub static_cache_ttl_secs: u64,
+    /// PHP binary for `engine = "child"` / embed (e.g. `php` or `php85` on Alpine).
     #[serde(default = "default_php_binary")]
     pub php_binary: String,
     /// Child-engine IPC bootstrap script; empty uses `index.php` in the process working directory.
@@ -125,7 +143,7 @@ pub struct RedisSettings {
 }
 
 /// HTTP/3 QUIC listener (experimental).
-#[derive(Deserialize, Serialize, Clone, Debug, Default)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct QuicSettings {
     #[serde(default)]
     pub enabled: bool,
@@ -134,8 +152,21 @@ pub struct QuicSettings {
     pub bind: String,
 }
 
+impl Default for QuicSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            bind: default_quic_bind(),
+        }
+    }
+}
+
 fn default_quic_bind() -> String {
     "0.0.0.0:443".into()
+}
+
+fn default_octane_workers() -> usize {
+    4
 }
 
 fn default_max_memory_mb() -> u64 {
@@ -154,6 +185,22 @@ fn default_php_binary() -> String {
     "php".into()
 }
 
+fn default_static_cache_max_age_secs() -> u64 {
+    3600
+}
+
+fn default_static_cache_immutable_max_age_secs() -> u64 {
+    31_536_000
+}
+
+fn default_static_cache_max_entries() -> u64 {
+    1000
+}
+
+fn default_static_cache_ttl_secs() -> u64 {
+    300
+}
+
 /// Resolved static file root (explicit `static_root` or Laravel `public/` under `code_dir`).
 pub fn effective_static_root(cfg: &RuntimeConfig) -> String {
     if !cfg.static_root.is_empty() {
@@ -161,6 +208,17 @@ pub fn effective_static_root(cfg: &RuntimeConfig) -> String {
     }
     let base = cfg.code_dir.trim_end_matches('/');
     format!("{base}/public")
+}
+
+/// Octane worker backend (IPC subprocess vs embed PHP).
+#[derive(Deserialize, Serialize, Clone, Debug, Default, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum OctaneBackend {
+    /// `php nusa-octane-worker` + Unix socket IPC (default for CI).
+    #[default]
+    Ipc,
+    /// Embed bridge (`nusa_embed_daemon.php` or libphp FFI when enabled).
+    Embed,
 }
 
 /// PHP engine execution kind.
@@ -190,11 +248,17 @@ pub(crate) fn builtin_defaults() -> RuntimeConfig {
         code_dir: "/app".into(),
         tmp_dir: "/tmp/nusa".into(),
         hot_reload: true,
-        octane_workers: 0, // disabled by default
+        octane_workers: default_octane_workers(),
+        octane_backend: OctaneBackend::Ipc,
         octane_max_memory_mb: 512,
         octane_max_requests: 1000,
+        octane_standby_workers: 0,
         bind: default_bind(),
         static_root: String::new(),
+        static_cache_max_age_secs: default_static_cache_max_age_secs(),
+        static_cache_immutable_max_age_secs: default_static_cache_immutable_max_age_secs(),
+        static_cache_max_entries: default_static_cache_max_entries(),
+        static_cache_ttl_secs: default_static_cache_ttl_secs(),
         php_binary: default_php_binary(),
         php_bootstrap: String::new(),
         tls: TlsSettings::default(),

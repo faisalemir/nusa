@@ -19,6 +19,7 @@ uuid.workspace = true
 bytes.workspace = true
 http.workspace = true
 parking_lot.workspace = true
+async-trait.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 notify.workspace = true

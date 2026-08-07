@@ -14,6 +14,7 @@ path = "src/lib.rs"
 tokio = { workspace = true }
 bytes = { workspace = true }
 nusa-octane-worker = { path = "../nusa-octane-worker" }
+nusa-engine-embed = { path = "../nusa-engine-embed" }
 nusa-gateway = { path = "../nusa-gateway" }
 nusa-core = { path = "../nusa-core" }
 nusa-config = { path = "../nusa-config" }

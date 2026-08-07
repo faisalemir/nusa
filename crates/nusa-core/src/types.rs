@@ -94,6 +94,8 @@ pub struct RequestContext {
     script_path: PathBuf,
     body: Bytes,
     headers: HeaderMap,
+    /// Tier-S2: plugin `pre_exec` may set a full response and skip PHP/Octane.
+    short_circuit: Option<PhpResponse>,
 }
 
 impl RequestContext {
@@ -108,7 +110,18 @@ impl RequestContext {
             script_path,
             body: Bytes::new(),
             headers: HeaderMap::new(),
+            short_circuit: None,
         }
+    }
+
+    /// Tier-S2: return this response from the gateway without invoking PHP.
+    pub fn set_short_circuit(&mut self, response: PhpResponse) {
+        self.short_circuit = Some(response);
+    }
+
+    /// Take a plugin short-circuit response (at most once per request).
+    pub fn take_short_circuit(&mut self) -> Option<PhpResponse> {
+        self.short_circuit.take()
     }
 
     #[must_use]

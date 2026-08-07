@@ -12,7 +12,9 @@ Run Nusa **without maintaining `nusa.toml` in the image** — use environment va
 | `NUSA_VFS_ROOT` | Optional | `{code_dir}/public` | Web root |
 | `NUSA_TMP_DIR` | Recommended | `/tmp/nusa` | Writable sandbox (mount a volume) |
 | `NUSA_BIND` | Optional | `0.0.0.0:8080` | HTTP listen |
-| `NUSA_OCTANE_WORKERS` | For Octane | `0` | `> 0` enables worker pool |
+| `NUSA_OCTANE_WORKERS` | For Octane | `4` | `> 0` enables worker pool |
+| `NUSA_OCTANE_BACKEND` | Optional | `ipc` | `ipc` (PHP subprocess) or `embed` (in-process / stdio daemon) |
+| `NUSA_OCTANE_STANDBY_WORKERS` | Optional | `1` in container defaults | Pre-bootstrapped workers for fast recycle |
 | `NUSA_MAX_WORKERS` | Optional | `4` | Gateway concurrency |
 | `NUSA_TIMEOUT_MS` | Optional | `30000` | Request timeout |
 | `NUSA_ENGINE` | Optional | `child` | `child` \| `ffi` \| `wasm` |
@@ -28,6 +30,7 @@ environment:
   NUSA_CODE_DIR: /app
   NUSA_TMP_DIR: /tmp/nusa
   NUSA_OCTANE_WORKERS: "4"
+  NUSA_OCTANE_BACKEND: "ipc"
   NUSA_MAX_WORKERS: "32"
   NUSA_TIMEOUT_MS: "30000"
   NUSA_BIND: "0.0.0.0:8080"

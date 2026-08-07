@@ -11,6 +11,7 @@
 
 pub mod deploy;
 pub mod dev;
+pub mod laravel_runtime;
 pub mod octane_pool;
 pub mod server;
 pub mod test;
@@ -83,9 +84,9 @@ pub enum Commands {
 
     /// Write a starter `nusa.toml` for the current Laravel project
     Init {
-        /// Enable Octane workers in the generated file (`octane_workers = 4`)
+        /// Disable Octane workers (default: `octane_workers = 4`, `octane_backend = ipc`)
         #[arg(long)]
-        octane: bool,
+        no_octane: bool,
 
         /// Output path
         #[arg(long, default_value = "nusa.toml")]

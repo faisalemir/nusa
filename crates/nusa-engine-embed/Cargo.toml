@@ -1,0 +1,29 @@
+[package]
+name = "nusa-engine-embed"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Embedded PHP worker pool for Laravel (stdio daemon or libphp FFI)"
+
+[dependencies]
+nusa-core = { path = "../nusa-core" }
+tokio = { workspace = true, features = ["process", "io-util", "sync", "time"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+bytes.workspace = true
+http.workspace = true
+async-trait.workspace = true
+parking_lot.workspace = true
+
+[features]
+default = []
+embed-php = ["dep:nusa-engine-ffi"]
+embed-stdio = []
+
+[dependencies.nusa-engine-ffi]
+path = "../nusa-engine-ffi"
+optional = true

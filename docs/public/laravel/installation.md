@@ -8,13 +8,13 @@ Install the Nusa binary and prepare your Laravel project paths before the first 
 
 | Component | Laravel on Nusa |
 |-----------|-----------------|
-| **PHP** | 8.2+ with extensions your app needs (`mbstring`, `openssl`, `pdo`, etc.) |
+| **PHP** | 8.5+ with extensions your app needs (`mbstring`, `openssl`, `pdo`, etc.) |
 | **Composer** | 2.x — `vendor/` must exist under `code_dir` |
 | **OS (production)** | **Alpine Linux musl** is the reference platform |
 | **OS (local dev)** | Linux, WSL, macOS, Windows — build `nusa`; sandbox proofs are strongest on Linux |
 | **Rust** | Only to **build** `nusa` from source (or use a prebuilt release when published) |
 
-Check [Compatibility matrix](../compatibility-matrix.md) for Laravel 10/11 and PHP 8.4 CI coverage.
+Check [Compatibility matrix](../compatibility-matrix.md) for Laravel 11 and PHP 8.5 CI coverage.
 
 ---
 

@@ -55,6 +55,35 @@ impl PhpEngine for OkEngine {
     async fn shutdown(&self) {}
 }
 
+struct ShortCircuitPlugin;
+
+#[async_trait]
+impl Plugin for ShortCircuitPlugin {
+    fn name(&self) -> &'static str {
+        "short-circuit"
+    }
+
+    async fn pre_exec(&self, ctx: &mut RequestContext) -> Result<()> {
+        ctx.set_short_circuit(PhpResponse::ok(418, b"teapot".to_vec()));
+        Ok(())
+    }
+}
+
+struct PanicEngine;
+
+#[async_trait]
+impl PhpEngine for PanicEngine {
+    async fn execute(&self, _ctx: RequestContext) -> Result<PhpResponse> {
+        panic!("engine must not run when Tier-S2 short-circuits");
+    }
+
+    fn capabilities(&self) -> &'static [&'static str] {
+        &["panic"]
+    }
+
+    async fn shutdown(&self) {}
+}
+
 struct PreExecFailPlugin;
 
 #[async_trait]
@@ -106,7 +135,7 @@ fn build_app(engine: Arc<dyn PhpEngine>, plugins: Arc<PluginRegistry>) -> Router
         Arc::new(NusaMetrics::init()),
         prometheus_handle(),
         Arc::new(tokio::sync::Mutex::new(None)),
-        Arc::new(parking_lot::Mutex::new(reset)),
+        Arc::new(reset),
     )
 }
 
@@ -115,6 +144,25 @@ async fn body_bytes(response: axum::response::Response) -> Vec<u8> {
         .await
         .expect("body")
         .to_vec()
+}
+
+#[tokio::test]
+async fn gateway_pre_exec_short_circuit_skips_engine() {
+    let plugins = Arc::new(PluginRegistry::new());
+    plugins.register(Arc::new(ShortCircuitPlugin));
+    let app = build_app(Arc::new(PanicEngine), plugins);
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/dynamic")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), 418);
+    let bytes = body_bytes(response).await;
+    assert_eq!(String::from_utf8_lossy(&bytes), "teapot");
 }
 
 #[tokio::test]

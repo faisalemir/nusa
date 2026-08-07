@@ -637,3 +637,26 @@ async fn plugin_pre_exec_error_stops_chain_before_next_plugin() {
     assert_eq!(executed, vec!["first", "failing"]);
     // p3 should NOT have run
 }
+
+// ─── WASM sandbox documentation (by design absent) ────────────────────────
+
+/// S14: WASM plugin sandbox isolation is deferred by design.
+///
+/// Per the Nusa Test Sector Registry (S14), the plugin deregister API and
+/// WASM sandbox isolation are intentionally absent at this stage:
+/// - WASM engine (`wasmtime`-based PHP sandbox) is not yet implemented
+/// - Plugin deregistration is not needed (plugins registered at startup only)
+/// - When WASM lands, add: `wasm_plugin_sandbox_isolation_test`
+///
+/// This test documents the gap so it is not missed during code review.
+#[test]
+fn wasm_plugin_sandbox_deferred_by_design() {
+    // STUB_CONTRACT: WASM plugin tests require `wasmtime` engine implementation.
+    // Current Plugin trait supports pre_exec/post_exec only (no WASM ABI).
+    // When WASM engine is added, this test must be replaced with:
+    // 1. WASM module load/unload
+    // 2. Sandbox memory isolation
+    // 3. Trap handling (OOB access, division by zero)
+    // 4. WASI filesystem restrictions
+    // STUB_CONTRACT: WASM plugin sandbox tests deferred until WASM engine implementation
+}

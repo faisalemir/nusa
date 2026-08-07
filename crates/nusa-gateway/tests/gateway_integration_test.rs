@@ -16,7 +16,6 @@ use axum::{
     http::{Request, StatusCode},
 };
 use bytes::Bytes;
-use parking_lot::Mutex;
 use tower::ServiceExt;
 
 use nusa_core::{
@@ -112,11 +111,11 @@ fn build_test_app(engine: Arc<dyn PhpEngine>) -> Router {
         Arc::new(NusaMetrics::init()),
         prometheus_handle.clone(),
         Arc::new(tokio::sync::Mutex::new(None)),
-        Arc::new(Mutex::new({
+        Arc::new({
             let mut r = StateResetOrchestrator::new(128);
             r.initialize();
             r
-        })),
+        }),
     )
 }
 
@@ -224,11 +223,11 @@ async fn test_circuit_breaker_opens_after_threshold() {
         Arc::new(NusaMetrics::init()),
         prometheus_handle.clone(),
         Arc::new(tokio::sync::Mutex::new(None)),
-        Arc::new(Mutex::new({
+        Arc::new({
             let mut r = StateResetOrchestrator::new(128);
             r.initialize();
             r
-        })),
+        }),
     );
 
     for _ in 0..2 {

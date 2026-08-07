@@ -78,14 +78,14 @@ async fn handle_subcommand(cmd: Commands) -> anyhow::Result<()> {
             start_server("", StartMode::Rollback, None).await
         }
         Commands::Init {
-            octane,
+            no_octane,
             output,
             force,
-        } => run_init(octane, &output, force),
+        } => run_init(no_octane, &output, force),
     }
 }
 
-fn run_init(octane: bool, output: &str, force: bool) -> anyhow::Result<()> {
+fn run_init(no_octane: bool, output: &str, force: bool) -> anyhow::Result<()> {
     let out = std::path::Path::new(output);
     if out.exists() && !force {
         anyhow::bail!(
@@ -100,7 +100,7 @@ fn run_init(octane: bool, output: &str, force: bool) -> anyhow::Result<()> {
             )
         })?;
 
-    let workers = if octane { 4 } else { 0 };
+    let workers = if no_octane { 0 } else { 4 };
     let contents = nusa_config::laravel::render_starter_toml(&root, workers);
     std::fs::write(out, contents)?;
     println!("Wrote {} (code_dir={})", out.display(), root.display());

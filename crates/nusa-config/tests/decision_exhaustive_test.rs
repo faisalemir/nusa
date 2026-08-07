@@ -30,7 +30,7 @@ fn config_precedence_defaults_only_all_defaults_applied() {
     assert!(config.vfs_root.is_empty() || config.vfs_root == "/app/public");
     assert_eq!(config.tmp_dir, "/tmp/nusa");
     assert!(config.hot_reload);
-    assert_eq!(config.octane_workers, 0);
+    assert_eq!(config.octane_workers, 4);
     assert_eq!(config.octane_max_memory_mb, 512);
     assert_eq!(config.octane_max_requests, 1000);
 

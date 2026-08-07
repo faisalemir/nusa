@@ -4,13 +4,11 @@
 //! rust-test-deep §1: Complete Injection Matrix
 //! rust-test-deep §3: Path Exhaustive
 
-use std::sync::Arc;
-use std::time::Duration;
-
 use async_trait::async_trait;
 use axum::{Router, body::Body, http::Request};
 use bytes::Bytes;
-use parking_lot::Mutex;
+use std::sync::{Arc, OnceLock};
+use std::time::Duration;
 use tower::ServiceExt;
 
 use nusa_core::{
@@ -27,7 +25,6 @@ use nusa_gateway::websocket::WsManager;
 use nusa_octane_worker::state_reset::StateResetOrchestrator;
 use nusa_plugin_api::PluginRegistry;
 use nusa_telemetry::metrics::NusaMetrics;
-use std::sync::OnceLock;
 
 static PROMETHEUS_HANDLE: OnceLock<Arc<metrics_exporter_prometheus::PrometheusHandle>> =
     OnceLock::new();
@@ -87,11 +84,11 @@ fn build_app() -> Router {
         Arc::new(NusaMetrics::init()),
         prometheus_handle.clone(),
         Arc::new(tokio::sync::Mutex::new(None)),
-        Arc::new(Mutex::new({
+        Arc::new({
             let mut r = StateResetOrchestrator::new(128);
             r.initialize();
             r
-        })),
+        }),
     )
 }
 

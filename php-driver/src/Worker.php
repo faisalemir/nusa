@@ -15,6 +15,9 @@ namespace Nusa\Octane;
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Facade;
+use Nusa\Octane\Http\RequestPath;
+use Nusa\Octane\Support\IpcBody;
+use Nusa\Octane\Support\OctaneCurlShare;
 
 class Worker
 {
@@ -55,6 +58,9 @@ class Worker
         }
 
         fwrite(STDERR, "Nusa Octane worker listening on {$this->socketPath}\n");
+
+        // PHP 8.5: warm persistent cURL share for outbound HTTP in this worker process.
+        OctaneCurlShare::instance();
 
         while (true) {
             $conn = @stream_socket_accept($this->socket, -1);
@@ -109,14 +115,19 @@ class Worker
     private function handleRequest(array $request): array
     {
         $method = $request['method'] ?? 'GET';
-        $uri = $request['uri'] ?? '/';
+        $uri = RequestPath::forLaravel(is_string($request['uri'] ?? null) ? $request['uri'] : '/');
         $headers = $request['headers'] ?? [];
-        $body = self::normalizeIpcBody($request['body'] ?? '');
+        $body = IpcBody::normalize($request['body'] ?? '');
+
+        $hostHeader = $headers['Host'] ?? $headers['host'] ?? ['localhost'];
+        $host = is_array($hostHeader)
+            ? (array_first($hostHeader) ?? 'localhost')
+            : (string) $hostHeader;
 
         // Build Laravel request with superglobals emulation
         $_SERVER['REQUEST_METHOD'] = $method;
         $_SERVER['REQUEST_URI'] = $uri;
-        $_SERVER['HTTP_HOST'] = $headers['Host'][0] ?? 'localhost';
+        $_SERVER['HTTP_HOST'] = $host;
 
         foreach ($headers as $name => $values) {
             $key = 'HTTP_' . strtoupper(str_replace('-', '_', $name));
@@ -156,32 +167,6 @@ class Worker
             'body' => $responseBody,
             'terminated' => false,
         ];
-    }
-
-    /**
-     * Rust IPC encodes request bodies as JSON byte arrays; PHP may also send UTF-8 strings.
-     */
-    private static function normalizeIpcBody(mixed $body): string
-    {
-        if ($body === null || $body === '') {
-            return '';
-        }
-        if (is_string($body)) {
-            return $body;
-        }
-        if (is_array($body)) {
-            $bytes = '';
-            foreach ($body as $byte) {
-                if (!is_int($byte) && !is_numeric($byte)) {
-                    continue;
-                }
-                $bytes .= chr((int) $byte);
-            }
-
-            return $bytes;
-        }
-
-        return (string) $body;
     }
 
     /**
@@ -225,6 +210,8 @@ class Worker
      */
     public function __destruct()
     {
+        OctaneCurlShare::reset();
+
         if (is_resource($this->socket)) {
             fclose($this->socket);
         }

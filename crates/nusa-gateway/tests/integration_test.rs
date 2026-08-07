@@ -28,7 +28,6 @@ use nusa_gateway::tenant_circuit_breaker::TenantCircuitBreakers;
 use nusa_gateway::websocket::WsManager;
 use nusa_plugin_api::PluginRegistry;
 use nusa_telemetry::metrics::NusaMetrics;
-use parking_lot::Mutex;
 
 struct OkEngine;
 
@@ -58,10 +57,11 @@ fn build_app() -> Router {
             .install_recorder()
             .expect("prometheus recorder"),
     );
-    let octane_pool = Arc::new(tokio::sync::Mutex::new(None));
+    let laravel_runtime: Arc<tokio::sync::Mutex<Option<Box<dyn nusa_core::LaravelHttpRuntime>>>> =
+        Arc::new(tokio::sync::Mutex::new(None));
     let mut octane_reset = nusa_octane_worker::state_reset::StateResetOrchestrator::new(128);
     octane_reset.initialize();
-    let octane_reset = Arc::new(Mutex::new(octane_reset));
+    let octane_reset = Arc::new(octane_reset);
 
     app(
         Arc::new(OkEngine),
@@ -79,7 +79,7 @@ fn build_app() -> Router {
         Arc::new(StaticFileHandler::new("/tmp".into())),
         Arc::new(NusaMetrics::init()),
         prometheus_handle,
-        octane_pool,
+        laravel_runtime,
         octane_reset,
     )
 }

@@ -11,7 +11,6 @@ use std::time::Duration;
 use nusa_octane_worker::metrics::WorkerMetrics;
 use nusa_octane_worker::pool::{Worker, WorkerPool, WorkerState};
 use nusa_octane_worker::state_reset::{OctaneEvent, StateResetOrchestrator};
-use parking_lot::Mutex;
 
 // ── WorkerMetrics: Relaxed Ordering ──
 
@@ -105,18 +104,18 @@ async fn workermetrics_concurrent_record_mixed_success_error_consistent() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn orchestrator_concurrent_emits_no_lost_events() {
     // === Arrange ===
-    let orchestrator = Arc::new(Mutex::new(StateResetOrchestrator::new(128)));
-    orchestrator.lock().initialize();
+    let mut orchestrator = StateResetOrchestrator::new(128);
+    orchestrator.initialize();
 
     let counter = Arc::new(AtomicU64::new(0));
     let counter_clone = counter.clone();
 
     // Register action
-    orchestrator
-        .lock()
-        .register_action("request_received".to_string(), move |_event| {
-            counter_clone.fetch_add(1, Ordering::SeqCst);
-        });
+    orchestrator.register_action("request_received".to_string(), move |_event| {
+        counter_clone.fetch_add(1, Ordering::SeqCst);
+    });
+
+    let orchestrator = Arc::new(orchestrator);
 
     // === Act ===
     let mut handles = Vec::new();
@@ -124,7 +123,7 @@ async fn orchestrator_concurrent_emits_no_lost_events() {
         let orch = orchestrator.clone();
         handles.push(tokio::spawn(async move {
             for j in 0..50 {
-                orch.lock().emit_event(OctaneEvent::RequestReceived {
+                orch.emit_event(OctaneEvent::RequestReceived {
                     request_id: format!("req-{}-{}", i, j),
                 });
             }
@@ -169,23 +168,25 @@ fn orchestrator_register_action_while_emit_no_hashmap_race() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn orchestrator_broadcast_many_subscribers_many_events_no_deadlock() {
     // === Arrange ===
-    let orchestrator = Arc::new(Mutex::new(StateResetOrchestrator::new(128)));
-    orchestrator.lock().initialize();
+    let mut orchestrator = StateResetOrchestrator::new(128);
+    orchestrator.initialize();
 
-    // === Act ===
     // Create multiple subscribers
     let mut subscribers = Vec::new();
     for _ in 0..8 {
-        subscribers.push(orchestrator.lock().subscribe());
+        subscribers.push(orchestrator.subscribe());
     }
 
+    let orchestrator = Arc::new(orchestrator);
+
+    // === Act ===
     // Emit many events from multiple threads
     let mut handles = Vec::new();
     for i in 0..4 {
         let orch = orchestrator.clone();
         handles.push(tokio::spawn(async move {
             for j in 0..50 {
-                orch.lock().emit_event(OctaneEvent::RequestTerminated {
+                orch.emit_event(OctaneEvent::RequestTerminated {
                     request_id: format!("req-{}-{}", i, j),
                     status: 200,
                 });

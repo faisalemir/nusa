@@ -183,6 +183,56 @@ fn config_octane_explicit_values() {
 }
 
 #[test]
+fn config_octane_backend_embed() {
+    let _lock = CONFIG_LOCK.lock().expect("config lock must succeed");
+
+    let content = r#"
+        engine = "child"
+        max_workers = 4
+        timeout_ms = 30000
+        wasm_memory_mb = 256
+        vfs_root = "/app"
+        code_dir = "/app"
+        tmp_dir = "/tmp"
+        hot_reload = false
+        octane_workers = 2
+        octane_backend = "embed"
+    "#;
+    let path = write_temp_config(content);
+    let result = nusa_config::load(&path);
+    cleanup(&path);
+
+    assert!(result.is_ok());
+    let cfg = nusa_config::get();
+    assert_eq!(cfg.octane_backend, nusa_config::OctaneBackend::Embed);
+}
+
+#[test]
+fn config_octane_standby_workers() {
+    let _lock = CONFIG_LOCK.lock().expect("config lock must succeed");
+
+    let content = r#"
+        engine = "child"
+        max_workers = 4
+        timeout_ms = 30000
+        wasm_memory_mb = 256
+        vfs_root = "/app"
+        code_dir = "/app"
+        tmp_dir = "/tmp"
+        hot_reload = false
+        octane_workers = 4
+        octane_standby_workers = 2
+    "#;
+    let path = write_temp_config(content);
+    let result = nusa_config::load(&path);
+    cleanup(&path);
+
+    assert!(result.is_ok());
+    let cfg = nusa_config::get();
+    assert_eq!(cfg.octane_standby_workers, 2);
+}
+
+#[test]
 fn config_octane_zero_workers() {
     let _lock = CONFIG_LOCK.lock().expect("config lock must succeed");
 

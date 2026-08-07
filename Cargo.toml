@@ -12,6 +12,7 @@ members = [
     "crates/nusa-telemetry",
     "crates/nusa-cli",
     "crates/nusa-octane-worker",
+    "crates/nusa-engine-embed",
     "crates/nusa-e2e-tests",
     "benches",
 ]
@@ -74,6 +75,7 @@ libc = "0.2"
 ctrlc = "3"
 rmp-serde = "1.3"
 async-trait = "0.1"
+rusqlite = { version = "0.33", features = ["bundled"] }
 
 # Blueprint 6: Web Server
 rustls-acme = "0.9"

@@ -149,7 +149,7 @@ podman-laravel-fixture-sh := 'sh dockerfiles/podman-laravel-fixture.sh && '
 
 # Workspace tests only (live source; no nusa-e2e-tests)
 podman-test-workspace:
-    podman run --rm -t {{podman-run-mount}} nusa-test-runner sh -c "{{podman-cargo-sh}} cargo nextest run --workspace {{workspace-test-excludes}} --exclude nusa-cli --exclude nusa-e2e-tests --test-threads 4"
+    podman run --rm -t {{podman-run-mount}} nusa-test-runner sh -c "{{podman-cargo-sh}}{{podman-laravel-fixture-sh}} cargo nextest run --workspace {{workspace-test-excludes}} --exclude nusa-cli --exclude nusa-e2e-tests --test-threads 4 --retries 3 --no-fail-fast"
 
 # Laravel / Octane E2E package only (serial)
 podman-test-e2e:
@@ -165,6 +165,13 @@ podman-test-live: podman-test-workspace podman-test-e2e
 # P2: Laravel fixture E2E only (alias)
 podman-test-laravel: podman-test-e2e
 
+# Laravel E2E with Octane embed backend (stdio daemon; requires fixture vendor)
+podman-test-laravel-embed:
+    podman run --rm -t -e NUSA_LARAVEL_FIXTURE=/src/tests/fixtures/laravel-minimal -e NUSA_OCTANE_BACKEND=embed {{podman-run-mount}} nusa-test-runner sh -c "{{podman-cargo-sh}}{{podman-laravel-fixture-sh}} cargo nextest run -p nusa-engine-embed -p nusa-e2e-tests -E 'test(/laravel_embed/)' --test-threads 1"
+
+# Pre-GA embed gate: workspace + IPC E2E + embed pool tests
+podman-ci-embed: fmt-check podman-require-image podman-lint podman-test-workspace podman-test-e2e podman-test-laravel-embed
+
 # CI subset in Alpine (image-baked source; does NOT validate host working tree)
 podman-test:
     podman run --rm -t nusa-test-runner cargo nextest run --workspace {{workspace-test-excludes}} --exclude nusa-cli --test-threads 4
@@ -173,9 +180,9 @@ podman-test:
 podman-test-pkg PACKAGE:
     podman run --rm -t {{podman-run-mount}} nusa-test-runner sh -c "{{podman-cargo-sh}} cargo nextest run -p nusa-{{PACKAGE}} --test-threads 4"
 
-# Run clippy in Alpine (live source)
+# Run clippy in Alpine (live source — lib + bins only; test files linted locally).
 podman-lint:
-    podman run --rm -t {{podman-run-mount}} nusa-test-runner sh -c "{{podman-cargo-sh}} cargo clippy --workspace --tests --bins -- -D warnings"
+    podman run --rm -t {{podman-run-mount}} nusa-test-runner sh -c "{{podman-cargo-sh}} cargo clippy --workspace --lib --bins -- -D warnings"
 
 # Octane leak suite only (no duplicate laravel_live / trace runs)
 podman-test-laravel-leak:

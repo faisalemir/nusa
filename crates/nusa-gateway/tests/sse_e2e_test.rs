@@ -91,7 +91,6 @@ async fn sse_endpoint_hitting_stream_created() {
     use async_trait::async_trait;
     use axum::{Router, body::Body, http::Request, http::StatusCode};
     use bytes::Bytes;
-    use parking_lot::Mutex;
     use std::sync::Arc;
     use std::sync::OnceLock;
     use tower::ServiceExt;
@@ -167,11 +166,11 @@ async fn sse_endpoint_hitting_stream_created() {
             Arc::new(NusaMetrics::init()),
             prometheus_handle.clone(),
             Arc::new(tokio::sync::Mutex::new(None)),
-            Arc::new(Mutex::new({
+            Arc::new({
                 let mut r = StateResetOrchestrator::new(128);
                 r.initialize();
                 r
-            })),
+            }),
         )
     }
 

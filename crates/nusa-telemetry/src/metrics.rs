@@ -11,6 +11,10 @@ pub struct NusaMetrics {
     // Counters
     pub requests_total: Counter,
     pub requests_failed_total: Counter,
+    /// Tier-S1 static file responses (gateway short-circuit before PHP).
+    pub static_served_total: Counter,
+    /// Tier-S2 plugin `pre_exec` short-circuit responses.
+    pub tier_s2_short_circuit_total: Counter,
     pub tenants_active: Gauge,
 
     // Histograms
@@ -29,6 +33,8 @@ impl NusaMetrics {
         Self {
             requests_total: metrics::counter!("nusa_requests_total"),
             requests_failed_total: metrics::counter!("nusa_requests_failed_total"),
+            static_served_total: metrics::counter!("nusa_static_served_total"),
+            tier_s2_short_circuit_total: metrics::counter!("nusa_tier_s2_short_circuit_total"),
             tenants_active: metrics::gauge!("nusa_tenants_active"),
 
             request_duration_ms: metrics::histogram!("nusa_request_duration_ms"),

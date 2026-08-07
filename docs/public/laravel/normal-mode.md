@@ -80,7 +80,7 @@ Run these inside your deploy image or init container—not on every request.
 
 ## Performance expectations
 
-Normal mode trades throughput for simplicity. Benchmark your routes in staging; compare to Octane mode on the same hardware before choosing.
+Normal mode is for **debug and migration**, not production Laravel throughput. Use **Octane mode** (`octane_workers > 0`) for production. Benchmark your routes in staging; compare Normal vs Octane on the same hardware before choosing.
 
 Templates: [Normal mode benchmark report](../benchmarks/normal-mode-report.md) (fill before GA).
 

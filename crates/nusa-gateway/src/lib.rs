@@ -409,7 +409,7 @@ async fn handler(State(state): State<AppState>, req: Request<Body>) -> Response<
     }
 
     let timeout_ms = state.resource_guard.request_timeout_ms;
-    let mut ctx_post: Option<RequestContext> = None;
+    let ctx_post: Option<RequestContext>;
     let execution = match octane_mode {
         OctaneRoute::Pool => {
             ctx_post = Some(ctx.clone());
@@ -444,7 +444,10 @@ async fn handler(State(state): State<AppState>, req: Request<Body>) -> Response<
             );
             result
         }
-        OctaneRoute::Engine => with_timeout(timeout_ms, state.engine.execute(ctx)).await,
+        OctaneRoute::Engine => {
+            ctx_post = Some(ctx.clone());
+            with_timeout(timeout_ms, state.engine.execute(ctx)).await
+        }
         OctaneRoute::NotReady => unreachable!(),
     };
 

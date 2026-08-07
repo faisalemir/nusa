@@ -1,5 +1,5 @@
 //! Static file handler with LRU cache and range request support.
-//! Blueprint 6 E1: High-performance static file serving.
+//! Blueprint 6 E1 / P4-E: High-performance static file serving (Tier-S1).
 //!
 //! Skills applied:
 //! - `domain-web`: HTTP static file serving, MIME type detection, Cache-Control headers
@@ -10,10 +10,42 @@ use std::path::{Path, PathBuf};
 
 use axum::{
     body::Body,
-    http::{StatusCode, header},
+    http::{Method, StatusCode, header},
     response::Response,
 };
 use moka::future::Cache;
+
+/// Cache-Control tuning for static assets (from `nusa.toml`).
+#[derive(Clone, Copy, Debug)]
+pub struct StaticServeConfig {
+    pub default_max_age_secs: u64,
+    pub immutable_max_age_secs: u64,
+    pub cache_max_entries: u64,
+    pub cache_ttl_secs: u64,
+}
+
+impl Default for StaticServeConfig {
+    fn default() -> Self {
+        Self {
+            default_max_age_secs: 3600,
+            immutable_max_age_secs: 31_536_000,
+            cache_max_entries: 1000,
+            cache_ttl_secs: 300,
+        }
+    }
+}
+
+impl StaticServeConfig {
+    #[must_use]
+    pub fn from_runtime(cfg: &nusa_config::RuntimeConfig) -> Self {
+        Self {
+            default_max_age_secs: cfg.static_cache_max_age_secs,
+            immutable_max_age_secs: cfg.static_cache_immutable_max_age_secs,
+            cache_max_entries: cfg.static_cache_max_entries.max(1),
+            cache_ttl_secs: cfg.static_cache_ttl_secs.max(1),
+        }
+    }
+}
 
 /// Static file cache entry.
 #[derive(Clone)]
@@ -21,6 +53,7 @@ struct CachedFile {
     content: Vec<u8>,
     content_type: String,
     cache_control: String,
+    content_encoding: Option<&'static str>,
 }
 
 /// Static file handler with LRU cache.
@@ -30,17 +63,24 @@ struct CachedFile {
 pub struct StaticFileHandler {
     public_dir: PathBuf,
     cache: Cache<String, CachedFile>,
+    serve_config: StaticServeConfig,
 }
 
 impl StaticFileHandler {
+    #[must_use]
     pub fn new(public_dir: PathBuf) -> Self {
+        Self::with_config(public_dir, StaticServeConfig::default())
+    }
+
+    #[must_use]
+    pub fn with_config(public_dir: PathBuf, serve_config: StaticServeConfig) -> Self {
         Self {
             public_dir,
-            // m10-performance: Cache files <1MB, up to 1000 entries, TTL 5 minutes
             cache: Cache::builder()
-                .max_capacity(1000)
-                .time_to_live(std::time::Duration::from_secs(300))
+                .max_capacity(serve_config.cache_max_entries)
+                .time_to_live(std::time::Duration::from_secs(serve_config.cache_ttl_secs))
                 .build(),
+            serve_config,
         }
     }
 
@@ -53,44 +93,50 @@ impl StaticFileHandler {
         extensions.iter().any(|ext| path.ends_with(ext))
     }
 
-    /// Serve a static file with proper headers and cache.
-    /// m15-anti-pattern: sanitize_path prevents directory traversal.
-    /// m10-performance: async file read + moka cache for hot paths.
-    pub async fn serve(&self, path: &str) -> Option<Response<Body>> {
-        let full_path = self.sanitize_path(path)?;
+    /// Serve a static file with proper headers and cache (GET or HEAD).
+    ///
+    /// When `Accept-Encoding` includes `br` or `gzip`, serves sibling `path.br` / `path.gz`
+    /// if present (build-time precompression). Brotli wins when both are accepted.
+    pub async fn serve(
+        &self,
+        path: &str,
+        method: &Method,
+        accept_encoding: Option<&str>,
+    ) -> Option<Response<Body>> {
+        let base_path = self.sanitize_path(path)?;
+        let disk_path = self.select_variant(&base_path, accept_encoding)?;
 
-        if !full_path.exists() || !full_path.is_file() {
+        if !disk_path.is_file() {
             return None;
         }
 
-        let cache_key = full_path.to_string_lossy().to_string();
+        let cache_key = format!(
+            "{}:{}",
+            disk_path.to_string_lossy(),
+            accept_encoding.unwrap_or("-")
+        );
 
-        // m10-performance: Check cache first to avoid disk I/O
-        if let Some(cached) = self.cache.get(&cache_key).await {
-            return Some(self.build_response(cached));
-        }
-
-        // domain-web: async file read for non-blocking I/O
-        let content = match tokio::fs::read(&full_path).await {
-            Ok(bytes) => bytes,
-            Err(_) => return None,
+        let cached = if let Some(hit) = self.cache.get(&cache_key).await {
+            hit
+        } else {
+            let content = tokio::fs::read(&disk_path).await.ok()?;
+            let logical = strip_precompressed_suffix(&disk_path);
+            let content_type = Self::content_type(&logical);
+            let cache_control = self.cache_control(&logical);
+            let content_encoding = encoding_for_path(&disk_path);
+            let entry = CachedFile {
+                content,
+                content_type,
+                cache_control,
+                content_encoding,
+            };
+            if entry.content.len() < 1024 * 1024 {
+                self.cache.insert(cache_key, entry.clone()).await;
+            }
+            entry
         };
 
-        let content_type = Self::content_type(&full_path);
-        let cache_control = Self::cache_control(&full_path);
-
-        let cached = CachedFile {
-            content,
-            content_type,
-            cache_control,
-        };
-
-        // m10-performance: Cache if under 1MB to avoid cache pollution
-        if cached.content.len() < 1024 * 1024 {
-            self.cache.insert(cache_key, cached.clone()).await;
-        }
-
-        Some(self.build_response(cached))
+        Some(self.build_response(cached, *method == Method::HEAD))
     }
 
     /// Sanitize path to prevent directory traversal (m15-anti-pattern).
@@ -102,26 +148,58 @@ impl StaticFileHandler {
         if canonical.starts_with(&public_canonical) {
             Some(canonical)
         } else {
-            None // m15-anti-pattern: Directory traversal blocked
+            None
         }
     }
 
-    fn build_response(&self, cached: CachedFile) -> Response<Body> {
-        // domain-web: proper Cache-Control, Content-Type, Content-Length headers
+    /// Pick on-disk file: `.br` > `.gz` > raw when client accepts encodings.
+    fn select_variant(&self, base: &Path, accept_encoding: Option<&str>) -> Option<PathBuf> {
+        if client_accepts_encoding(accept_encoding, "br") {
+            let br = path_with_suffix(base, ".br");
+            if br.is_file() {
+                return Some(br);
+            }
+        }
+        if client_accepts_encoding(accept_encoding, "gzip") {
+            let gz = path_with_suffix(base, ".gz");
+            if gz.is_file() {
+                return Some(gz);
+            }
+        }
+        base.is_file().then(|| base.to_path_buf())
+    }
+
+    fn build_response(&self, cached: CachedFile, head_only: bool) -> Response<Body> {
         let content_len = cached.content.len();
-        let mut response = Response::new(Body::from(cached.content));
+        let body = if head_only {
+            Body::empty()
+        } else {
+            Body::from(cached.content)
+        };
+        let mut response = Response::new(body);
         *response.status_mut() = StatusCode::OK;
-        response.headers_mut().insert(
+        let headers = response.headers_mut();
+        headers.insert(
             header::CONTENT_TYPE,
             header::HeaderValue::from_str(&cached.content_type).unwrap(),
         );
-        response.headers_mut().insert(
+        headers.insert(
             header::CACHE_CONTROL,
             header::HeaderValue::from_str(&cached.cache_control).unwrap(),
         );
-        response.headers_mut().insert(
+        headers.insert(
             header::CONTENT_LENGTH,
             header::HeaderValue::from(content_len),
+        );
+        if let Some(enc) = cached.content_encoding {
+            headers.insert(
+                header::CONTENT_ENCODING,
+                header::HeaderValue::from_static(enc),
+            );
+        }
+        headers.insert(
+            header::HeaderName::from_static("x-nusa-tier"),
+            header::HeaderValue::from_static("S1"),
         );
         response
     }
@@ -148,17 +226,78 @@ impl StaticFileHandler {
         }
     }
 
-    /// Cache-Control strategy: immutable for hash-named files (domain-web).
-    fn cache_control(path: &Path) -> String {
-        // Hash-named files (e.g. app.abc123.css) get immutable cache
+    fn cache_control(&self, path: &Path) -> String {
         let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
 
         if stem.contains('.') {
-            // Contains hash pattern → long TTL with immutable
-            "public, max-age=31536000, immutable".into()
+            format!(
+                "public, max-age={}, immutable",
+                self.serve_config.immutable_max_age_secs
+            )
         } else {
-            // Non-hashed files → short TTL
-            "public, max-age=3600".into()
+            format!("public, max-age={}", self.serve_config.default_max_age_secs)
         }
+    }
+}
+
+fn path_with_suffix(base: &Path, suffix: &str) -> PathBuf {
+    let mut os = base.as_os_str().to_os_string();
+    os.push(suffix);
+    PathBuf::from(os)
+}
+
+fn strip_precompressed_suffix(path: &Path) -> PathBuf {
+    let Some(name) = path.file_name().and_then(|s| s.to_str()) else {
+        return path.to_path_buf();
+    };
+    let stripped = name
+        .strip_suffix(".br")
+        .or_else(|| name.strip_suffix(".gz"))
+        .unwrap_or(name);
+    let mut logical = path.to_path_buf();
+    logical.set_file_name(stripped);
+    logical
+}
+
+fn encoding_for_path(path: &Path) -> Option<&'static str> {
+    path.file_name().and_then(|s| s.to_str()).and_then(|name| {
+        if name.ends_with(".br") {
+            Some("br")
+        } else if name.ends_with(".gz") {
+            Some("gzip")
+        } else {
+            None
+        }
+    })
+}
+
+fn client_accepts_encoding(accept: Option<&str>, encoding: &str) -> bool {
+    let Some(raw) = accept else {
+        return false;
+    };
+    raw.split(',').any(|part| {
+        part.split(';')
+            .next()
+            .map(|token| token.trim().eq_ignore_ascii_case(encoding))
+            .unwrap_or(false)
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn accepts_br_and_gzip_tokens() {
+        assert!(client_accepts_encoding(Some("gzip, deflate, br"), "br"));
+        assert!(client_accepts_encoding(Some("gzip"), "gzip"));
+        assert!(!client_accepts_encoding(Some("identity"), "br"));
+    }
+
+    #[test]
+    fn encoding_for_precompressed_paths() {
+        assert_eq!(encoding_for_path(Path::new("app.js.br")), Some("br"));
+        assert_eq!(encoding_for_path(Path::new("app.js.gz")), Some("gzip"));
+        assert_eq!(encoding_for_path(Path::new("app.js")), None);
     }
 }

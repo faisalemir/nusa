@@ -214,3 +214,35 @@ fn engine_error_variants_are_exhaustive() {
         );
     }
 }
+
+// ─── S16 Engine Deferred Status Documentation ────────────────────────────
+
+/// S16: Engine switch/fallback/warmup tests are deferred by design.
+///
+/// Per the Nusa Test Sector Registry (S16), the following are intentionally
+/// absent at this stage:
+/// - WASM engine (`wasmtime`-based) — no implementation exists
+/// - FFI engine (libphp ZTS) — lives in `nusa-engine-embed`, not standalone
+/// - Child engine lifecycle — covered via `nusa-octane-worker` pool tests
+/// - Engine switching (FFI → WASM → Child → Embed) — no runtime switch impl
+/// - Engine warmup (cold start vs warm start latency) — no warmup API
+///
+/// The `PhpEngine` trait in `nusa-core` defines the contract; actual engine
+/// implementations are:
+/// - `nusa-octane-worker` (child engine via IPC subprocess)
+/// - `nusa-engine-embed` (embed bridge via stdio daemon or FFI)
+///
+/// When engine implementations are added, add:
+/// - `engine_lifecycle_test.rs` (spawn, execute, shutdown per engine)
+/// - `engine_switch_fallback_test.rs` (FFI fails → fallback to child)
+/// - `engine_warmup_test.rs` (cold vs warm start latency comparison)
+#[test]
+fn engine_lifecycle_deferred_by_design() {
+    // STUB_CONTRACT: Engine lifecycle tests require concrete engine impls.
+    // Current state: PhpEngine trait is tested via MockEngine (integration).
+    // Real engine tests deferred until engine implementations exist.
+    assert!(
+        true,
+        "Engine lifecycle tests deferred until engine implementations"
+    );
+}

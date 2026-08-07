@@ -80,7 +80,7 @@ See [Configuration for Laravel](configuration-for-laravel.md).
 | Cause | Fix |
 |-------|-----|
 | macOS/Windows ≠ Alpine musl | Staging on Alpine; run `just podman-ci` |
-| Different PHP extensions | Match `php84` extensions in CI Dockerfile |
+| Different PHP extensions | Match `php85` extensions in CI Dockerfile |
 | `.env` missing in image | Inject via secrets; never rely on local-only `.env` |
 
 ---

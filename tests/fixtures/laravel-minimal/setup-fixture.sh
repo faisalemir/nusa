@@ -16,10 +16,10 @@ fi
 mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views storage/logs bootstrap/cache
 chmod -R a+rwX storage bootstrap/cache 2>/dev/null || true
 
-if command -v php84 >/dev/null 2>&1; then
+if command -v php85 >/dev/null 2>&1; then
+  PHP=php85
+elif command -v php84 >/dev/null 2>&1; then
   PHP=php84
-elif command -v php83 >/dev/null 2>&1; then
-  PHP=php83
 else
   PHP=php
 fi

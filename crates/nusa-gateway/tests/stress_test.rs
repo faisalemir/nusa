@@ -28,7 +28,6 @@ use nusa_gateway::websocket::WsManager;
 use nusa_octane_worker::state_reset::StateResetOrchestrator;
 use nusa_plugin_api::PluginRegistry;
 use nusa_telemetry::metrics::NusaMetrics;
-use parking_lot::Mutex;
 
 static PROMETHEUS_HANDLE: OnceLock<Arc<metrics_exporter_prometheus::PrometheusHandle>> =
     OnceLock::new();
@@ -85,11 +84,11 @@ fn build_test_app() -> Router {
         Arc::new(NusaMetrics::init()),
         prometheus_handle.clone(),
         Arc::new(tokio::sync::Mutex::new(None)),
-        Arc::new(Mutex::new({
+        Arc::new({
             let mut r = StateResetOrchestrator::new(128);
             r.initialize();
             r
-        })),
+        }),
     )
 }
 
